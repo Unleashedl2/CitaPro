@@ -1,0 +1,26 @@
+# /etc/systemd/system/citapro.service — servicio endurecido
+[Unit]
+Description=CitaPro
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/citapro
+ExecStart=/opt/citapro/venv/bin/python main.py run --port 8001
+Environment=CITAPRO_THREADS=16
+Environment=CITAPRO_MASTER_IPS=SU_IP
+Restart=always
+RestartSec=3
+# Endurecimiento: el proceso solo puede escribir en data/ y public/uploads/
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/citapro/data /opt/citapro/public/uploads
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

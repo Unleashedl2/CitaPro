@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CitaPro – Sala de control</title><meta name="robots" content="noindex">
+
+<link rel="manifest" href="/master/manifest.webmanifest">
+<meta name="theme-color" content="#b4532a">
+<meta name="application-name" content="CitaPro Master">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="/master/icon-192.png" type="image/png">
+<style>
+:root{--bg:#faf7f2;--card:#fff;--tx:#1f1b16;--mu:#6f675d;--ac:#b4532a;--ac2:#fff;--bd:#e6ded2;--ok:#2f7d4f;--wa:#b7791f;--er:#b3261e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#16130f;--card:#221e19;--tx:#f3ece2;--mu:#a69c8e;--ac:#e07a4a;--ac2:#1a1209;--bd:#3a332b;--ok:#5cc489;--wa:#e2b45a;--er:#ff8a80;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.w{max-width:900px;margin:0 auto;padding:16px}h1{font-size:22px;margin:0}h2{font-size:17px;margin:22px 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:10px 0}
+.top,.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.top{justify-content:space-between}.mu{color:var(--mu);font-size:13px}
+input,select{width:100%;padding:11px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;margin:4px 0 10px}
+label{font-size:13px;color:var(--mu)}
+button{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:8px 13px}
+button.p{background:var(--ac);color:var(--ac2);border-color:var(--ac);font-weight:600}button.er{color:var(--er)}
+.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}.kp .card{margin:0}.kp b{font-size:24px;display:block}
+.bd{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;border:1px solid currentColor}.ok{color:var(--ok)}.no{color:var(--er)}
+.st{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;margin:8px 0}.st div{background:var(--bg);border-radius:8px;padding:6px 8px}.st b{display:block}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:560px){.g2{grid-template-columns:1fr}}
+.qr{width:200px;height:200px;background:#fff;padding:8px;border-radius:12px}
+#toast{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));max-width:560px;margin:auto;background:var(--tx);color:var(--bg);padding:12px 14px;border-radius:12px;display:none;z-index:9}
+</style></head>
+<body><div class="w" id="app"><p class="mu">Cargando…</p></div><div id="toast"></div>
+<script>
+const ICON={barberia:'💈',peluqueria:'💇',manicure:'💅'};let TYPES={},L=[],R=null,Q=null,AUTH=false,err='',CH={},BCV={},PER='mes',INC={total:0,mes:0,mes_anterior:0,mes_label:'',negocios_pagaron:0,pagos:[],por_negocio:[]},NT='#b4532a',NEED2FA=false,TOTP=false,SETUP=null,RECOV=null;
+const PRESETS=[['Ladrillo','#b4532a'],['Rosa','#d6457a'],['Morado','#7b4fa3'],['Azul','#2f6fb0'],['Verde','#2f7d4f'],['Turquesa','#00838f'],['Dorado','#b7791f'],['Coral','#e26d5c'],['Grafito','#3a3a3a'],['Vino','#8c1c3c']];
+const COL=['#b4532a','#2f7d4f','#3b6ea5','#b7791f','#7b4fa3','#c2185b','#00838f','#6d4c41'];
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(a,d){const r=await fetch('api?a='+a,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'citapro'},body:JSON.stringify(d||{}),credentials:'same-origin'});
+ let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw Object.assign(new Error(j.error||'Error de conexión'),{status:r.status});return j}
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',4000)}
+const url=p=>location.origin+p;
+const ago=t=>{if(!t)return 'sin actividad';const m=Math.floor((Date.now()/1000-t)/60);return m<2?'hace un momento':m<60?`hace ${m} min`:m<1440?`hace ${Math.floor(m/60)} h`:`hace ${Math.floor(m/1440)} d`};
+async function boot(){try{const j=await api('me');AUTH=!!j.user;if(AUTH){TOTP=!!j.user.totp;await load()}else render()}catch(e){render()}}
+async function load(){try{INC=await api('income').catch(()=>INC);const j=await api('list',{period:PER});L=j.tenants;TYPES=j.types;CH=j.charts||{};BCV=j.bcv||{};WA=j.wa||WA;render()}catch(e){if(e.status===401){AUTH=false}render()}}
+function render(){const A=$('#app');if(!AUTH){A.innerHTML=`<div style="text-align:center;margin:40px 0 10px"><div style="font-size:44px">🛠</div><h1>Sala de control</h1><div class="mu">CitaPro · Master</div></div>
+ <div class="card"><label>Usuario</label><input id="lu" autocapitalize="off"><label>Contraseña</label><input id="lp" type="password" onkeydown="if(event.key==='Enter')login()">${NEED2FA?`<label>Código de la app o código de recuperación</label><input id="lc" inputmode="numeric" autocomplete="one-time-code" onkeydown="if(event.key==='Enter')login2()"><label style="display:flex;gap:8px;align-items:center"><input id="lr" type="checkbox" checked style="width:auto;margin:0"> Recordar este equipo 30 días</label>`:''}
+ <div class="no">${esc(err)}</div><button class="p" style="width:100%" onclick="${NEED2FA?'login2()':'login()'}">${NEED2FA?'Verificar':'Entrar'}</button></div>`;return}
+ const act=L.filter(t=>t.active).length,by=k=>L.filter(t=>t.type===k).length,porV=L.filter(t=>t.billing&&t.billing.estado==='por_vencer').length,venc=L.filter(t=>t.billing&&t.billing.estado==='vencido').length;
+ A.innerHTML=`<div class="top"><div><h1>🛠 Sala de control</h1><div class="mu">Negocios con base de datos independiente</div></div><button onclick="logout()">Salir</button></div>
+ <h2>Resumen</h2><div class="kp"><div class="card"><span class="mu">Negocios</span><b>${L.length}</b></div><div class="card"><span class="mu">Activos</span><b class="ok">${act}</b></div>
+ <div class="card"><span class="mu">Suspendidos</span><b class="no">${L.length-act}</b></div><div class="card"><span class="mu">Por vencer (3 días)</span><b class="no">${porV}</b></div><div class="card"><span class="mu">Vencidos</span><b class="no">${venc}</b></div>
+ ${Object.entries(TYPES).map(([k,n])=>`<div class="card"><span class="mu">${ICON[k]} ${n}</span><b>${by(k)}</b></div>`).join('')}</div>
+ ${incSec()}
+ <h2>Estadísticas</h2><div class="row"><label style="margin:0">Periodo:</label><select id="per" style="width:auto" onchange="PER=this.value;load()"><option value="mes" ${PER==='mes'?'selected':''}>Mes en curso</option><option value="todo" ${PER==='todo'?'selected':''}>Histórico</option></select></div>
+ <div class="g2">${pieCard('Negocios que más ingresos generan',CH.ingresos||[],v=>'$'+Number(v).toFixed(2))}${pieCard('Negocios con más clientes confirmados',CH.clientes||[],v=>v+(v===1?' persona':' personas'))}</div>
+ ${bcvCard()}
+ ${waCard()}
+ ${R?`<div class="card" style="border-color:var(--ok)"><b>✅ Negocio creado</b><div class="g2"><div><p>Enlace para sus clientes:<br><b>${esc(url(R.path))}</b></p>
+ <p>Usuario administrador: <b>${esc(R.adminUser)}</b><br>Contraseña temporal: <b>${esc(R.tempPass)}</b><br><span class="mu">Al entrar por primera vez deberá crear su contraseña privada y registrar su teléfono.</span></p>
+ <div class="row"><button onclick="copy(R.path,R.adminUser,R.tempPass)">Copiar mensaje para el cliente</button><button onclick="R=null;render()">Cerrar</button></div></div>
+ <div style="text-align:center"><img class="qr" src="${R.path}qr.svg" alt="QR"><br><a href="${R.path}qr.svg" download="qr-${esc(R.slug)}.svg"><button>Descargar QR</button></a></div></div></div>`:''}
+ <h2>Crear negocio</h2><div class="card"><div class="g2"><div><label>Nombre del negocio (único)</label><input id="cn" placeholder="Ej. Barbería Don Pepe"></div>
+ <div><label>Rubro</label><select id="ct">${Object.entries(TYPES).map(([k,n])=>`<option value="${k}">${ICON[k]} ${n}</option>`).join('')}</select></div>
+ <div><label>Usuario del administrador</label><input id="cu" value="admin" autocapitalize="off"></div>
+ <div><label>Contraseña temporal (vacío = generar)</label><input id="cp" placeholder="se genera sola"></div></div>
+ <div><label>Color principal del negocio</label><div class="row">${PRESETS.map(([n,c])=>`<button title="${n}" onclick="NT='${c}';render()" style="width:36px;height:36px;border-radius:50%;background:${c};border:${NT===c?'3px solid var(--tx)':'1px solid var(--bd)'};padding:0"></button>`).join('')}<input type="color" value="${NT}" onchange="NT=this.value;render()" style="width:48px;height:36px;padding:2px"></div></div>
+ <div class="no">${esc(err)}</div><button class="p" onclick="create()">Crear negocio y base de datos</button></div>
+ <h2>Negocios (${L.length})</h2>${L.map(t=>`<div class="card"><div class="top"><div><b>${ICON[t.type]||''} ${esc(t.name)}</b> <span class="bd ${t.active?'ok':'no'}">${t.active?'Activo':'Suspendido'}</span>
+ <div class="mu">${esc(url(t.path))} · admin: ${esc(t.admin_user)} · creado ${new Date(t.created*1000).toLocaleDateString('es')}</div></div></div>
+ ${billLine(t)}
+ <div class="st"><div><span class="mu">Clientes</span><b>${t.clients}</b></div><div><span class="mu">Citas</span><b>${t.citas}</b></div><div><span class="mu">Citas hoy</span><b>${t.hoy}</b></div>
+ <div><span class="mu">Ingresos del mes</span><b>$${t.ingresos_mes}</b></div><div><span class="mu">Última actividad</span><b>${ago(t.last_seen)}</b></div></div>
+ <div class="row"><button onclick="copyLink('${t.path}')">Copiar enlace</button><button onclick="showQR('${t.slug}')">Ver QR</button>
+ <button onclick="resetAdmin('${t.slug}')">Restablecer clave del admin</button><button onclick="rename('${t.slug}','${esc(t.name).replace(/'/g,'&#39;')}')">Editar nombre</button>
+ <button class="${t.active?'er':''}" onclick="toggle('${t.slug}',${t.active?0:1})">${t.active?'Suspender':'Reactivar'}</button><button class="er" onclick="del('${t.slug}','${esc(t.name).replace(/'/g,'&#39;')}')">Eliminar</button></div>
+ ${Q===t.slug?`<div style="text-align:center;margin-top:10px"><img class="qr" src="${t.path}qr.svg" alt="QR"><br><a href="${t.path}qr.svg" download="qr-${esc(t.slug)}.svg"><button>Descargar QR</button></a></div>`:''}</div>`).join('')||'<div class="card mu">Aún no hay negocios.</div>'}
+ <h2>Mi cuenta</h2>${totpCard()}<div class="card"><div class="g2"><div><label>Contraseña actual</label><input id="po" type="password"></div><div><label>Nueva (mín. 8)</label><input id="pn" type="password"></div><div><label>Repite la nueva</label><input id="pn2" type="password"></div></div><button onclick="changePass()">Cambiar contraseña</button></div>`}
+function pie(items){const tot=items.reduce((s,i)=>s+i.value,0);if(!tot)return '<div class="mu" style="padding:40px 0;text-align:center">Sin datos en este periodo</div>';
+ let a=-Math.PI/2,svg='',leg='';const R=90,C=100;
+ items.forEach((it,i)=>{const f=it.value/tot,pc=(f*100).toFixed(1)+'%',col=COL[i%COL.length];if(f<=0)return;
+  if(f>=0.9999){svg+=`<circle cx="${C}" cy="${C}" r="${R}" fill="${col}"/>`}
+  else{const a2=a+f*2*Math.PI,x1=C+R*Math.cos(a),y1=C+R*Math.sin(a),x2=C+R*Math.cos(a2),y2=C+R*Math.sin(a2);
+   svg+=`<path d="M${C},${C} L${x1.toFixed(2)},${y1.toFixed(2)} A${R},${R} 0 ${f>0.5?1:0} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${col}"/>`;
+   if(f>=0.05){const m=a+f*Math.PI,lx=C+R*0.6*Math.cos(m),ly=C+R*0.6*Math.sin(m);svg+=`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="13" font-weight="700">${pc}</text>`}
+   a=a2}
+  leg+=`<div class="row" style="justify-content:space-between"><span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${col}"></i> ${esc(it.label)}</span><b>${pc}</b></div>`});
+ return `<svg viewBox="0 0 200 200" style="width:200px;height:200px;display:block;margin:auto">${svg}</svg><div style="margin-top:10px">${leg}</div>`}
+function pieCard(title,items,fmt){const top=items[0];const cap=top&&top.value>0?`<div style="text-align:center;margin-top:12px;border-top:1px solid var(--bd);padding-top:10px"><span class="mu">Líder</span><br><b>${esc(top.label)}</b><br><span style="font-size:20px;font-weight:700">${fmt(top.value)}</span></div>`:'';
+ return `<div class="card"><b>${title}</b>${pie(items)}${cap}</div>`}
+const bcvCard=()=>`<div class="card"><div class="top"><b>Tasa BCV (automática)</b><button onclick="refreshRates()">Actualizar ahora</button></div>
+ <div class="kp" style="margin-top:8px"><div class="card"><span class="mu">Dólar</span><b>Bs. ${BCV.usd||'–'}</b></div><div class="card"><span class="mu">Euro</span><b>Bs. ${BCV.eur||'–'}</b></div></div>
+ <div class="mu">Última lectura: ${esc(BCV.upd||'nunca')} · ${BCV.ok?'<span class="ok">correcta</span>':'<span class="no">no disponible: '+esc(BCV.err||'sin datos')+'</span>'}</div>
+ <div class="mu">Se consulta sola cada hora. Si el BCV no responde, se mantiene la última tasa válida y los negocios siguen cobrando con ella.</div></div>`;
+const money=v=>'$'+Number(v||0).toFixed(2);
+const incSec=()=>`<h2>Ingresos por suscripciones</h2>
+ <div class="kp"><div class="card"><span class="mu">Total histórico</span><b class="ok">${money(INC.total)}</b></div><div class="card"><span class="mu">Mes en curso (${esc(INC.mes_label)})</span><b>${money(INC.mes)}</b></div><div class="card"><span class="mu">Mes anterior</span><b>${money(INC.mes_anterior)}</b></div><div class="card"><span class="mu">Negocios que han pagado</span><b>${INC.negocios_pagaron}</b></div></div>
+ <div class="card"><b>Negocios que han pagado</b>${(INC.por_negocio||[]).map(r=>`<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--bd);padding:8px 0"><span><b>${esc(r.negocio)}</b> <span class="mu">· ${r.pagos} pago(s) · último ${fd(r.ultimo)}</span></span><b>${money(r.total)}</b></div>`).join('')||'<div class="mu">Aún no hay pagos registrados.</div>'}</div>
+ <div class="card"><b>Detalle de pagos</b><div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+ <tr style="text-align:left;color:var(--mu)"><th style="padding:6px">Fecha</th><th>Negocio</th><th>Monto</th><th>Referencia</th><th>Periodo cubierto</th></tr>
+ ${(INC.pagos||[]).map(p=>`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px">${fd(p.paid_on)}</td><td>${esc(p.negocio)}</td><td><b>${money(p.amount)}</b></td><td>${esc(p.ref||'–')}</td><td>${fd(p.period_start)} → ${fd(p.period_end)}</td></tr>`).join('')||'<tr><td colspan="5" class="mu" style="padding:10px">Sin pagos todavía.</td></tr>'}
+ </table></div></div>`;
+const fd=s=>{const[y,m,d]=String(s||'').split('-');return d&&m&&y?d+'/'+m+'/'+y:'–'};
+function billLine(t){const b=t.billing||{};const bad=b.estado==='vencido'||b.estado==='por_vencer';const col=bad?'var(--er)':'var(--ok)';
+ const txt=b.estado==='vencido'?'⛔ VENCIDO desde '+fd(b.vence):'Vence el '+fd(b.vence)+(b.estado==='por_vencer'?' · faltan '+b.dias_restantes+' día(s)':'');
+ return `<div class="row" style="margin-top:8px"><b style="color:${col}">${txt}</b><span class="mu">Último pago: ${fd(b.ultimo_pago)}${b.ref?' · ref. '+esc(b.ref):''}</span><button class="p" onclick="regPay('${t.slug}')">Registrar pago</button></div>`}
+async function regPay(slug){const amount=prompt('Monto pagado (USD):');if(amount===null)return;const ref=prompt('Número de referencia del pago:');if(ref===null)return;
+ try{const r=await api('pay',{slug,amount,ref});toast('Pago registrado. Nuevo vencimiento: '+fd(r.billing.vence));await load()}catch(e){toast(e.message)}}
+let WA={configured:false,on:false};
+const waCard=()=>`<div class="card"><div class="top"><b>Recordatorios de vencimiento por WhatsApp</b><button class="${WA.on?'er':'ok'}" onclick="waToggle(${!WA.on})">${WA.on?'Desactivar':'Activar'}</button></div>
+ <div class="mu">${!WA.configured?'<span class="no">WhatsApp no está configurado en el servidor (WA_TOKEN / WA_PHONE_ID).</span>':(WA.on?'<span class="ok">Activado:</span> el administrador recibe el aviso de vencimiento por WhatsApp.':'<span class="no">Desactivado:</span> solo se envían avisos dentro de la app y notificaciones push.')}</div>
+ <div class="mu">Las notificaciones push (en el celular del administrador y de los clientes) no se desactivan desde aquí: cada usuario las activa en su equipo.</div></div>`;
+async function waToggle(on){try{const r=await api('waToggle',{on});WA.on=r.wa_on;toast(r.wa_on?'Recordatorio por WhatsApp activado.':'Recordatorio por WhatsApp desactivado.');render()}catch(e){toast(e.message)}}
+async function refreshRates(){try{const r=await api('rates');toast(r.ok?'Tasa actualizada desde el BCV.':'No se pudo leer el BCV: '+r.err);await load()}catch(e){toast(e.message)}}
+async function login(){try{const r=await api('login',{username:$('#lu').value,password:$('#lp').value});err='';if(r.need2fa){NEED2FA=true;render();setTimeout(()=>$('#lc')&&$('#lc').focus(),50);return}AUTH=true;await load()}catch(e){err=e.message;render()}}
+async function login2(){try{await api('login2',{code:$('#lc').value,remember:!!($('#lr')&&$('#lr').checked)});NEED2FA=false;err='';AUTH=true;TOTP=true;await load()}catch(e){err=e.message;render()}}
+const totpCard=()=>`<div class="card"><b>Doble verificación</b>${RECOV?`<div class="card" style="border-color:var(--wa)"><b>⚠ Códigos de recuperación</b><p class="mu">Si pierdes tu celular, cada código sirve una sola vez para entrar en lugar del código de la app. Guárdalos en un lugar seguro. <b>No se volverán a mostrar.</b></p><div style="font-family:monospace;columns:2;line-height:1.9">${RECOV.map(x=>esc(x)).join('<br>')}</div><div class="row" style="margin-top:8px"><button onclick="RECOV=null;render()">Ya los guardé</button></div></div>`:''}<p class="mu">Protege tu cuenta Master con un código de tu celular (Google Authenticator, Microsoft Authenticator, Authy…).</p>
+ ${TOTP?`<div class="ok">✔ Activada</div><p class="mu">Los equipos de confianza no piden código durante 30 días. Un equipo nuevo siempre lo pide.</p><button onclick="revokeTrusted()">Cerrar sesión en todos los equipos de confianza</button><div class="row" style="margin-top:8px"><input id="dpw" type="password" placeholder="Tu contraseña" style="flex:1"><input id="dcd" inputmode="numeric" placeholder="Código" style="width:120px"><button class="er" onclick="totpOff()">Desactivar</button></div>`
+ :SETUP?`<div class="g2"><div style="text-align:center"><img src="data:image/svg+xml;utf8,${encodeURIComponent(SETUP.svg)}" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:12px" alt="QR"></div>
+ <div><p class="mu">Escanea el QR, o escribe esta clave manualmente en tu app:</p><b style="word-break:break-all">${esc(SETUP.secret)}</b><label>Código de 6 dígitos que muestra tu app</label><input id="tcd" inputmode="numeric"><button class="p" onclick="totpOn()">Activar</button></div></div>`
+ :`<button class="p" onclick="totpSetup()">Activar doble verificación</button>`}</div>`;
+async function revokeTrusted(){try{await api('revokeTrusted');toast('Equipos de confianza revocados.')}catch(e){toast(e.message)}}
+async function totpSetup(){try{SETUP=await api('totpSetup');render()}catch(e){toast(e.message)}}
+async function totpOn(){try{const r=await api('totpEnable',{code:$('#tcd').value});TOTP=true;SETUP=null;RECOV=r.recovery;render()}catch(e){toast(e.message)}}
+async function totpOff(){try{await api('totpDisable',{password:$('#dpw').value,code:$('#dcd').value});TOTP=false;toast('Doble verificación desactivada.');render()}catch(e){toast(e.message)}}
+async function logout(){await api('logout').catch(()=>{});AUTH=false;L=[];R=null;render()}
+async function create(){try{const r=await api('create',{name:$('#cn').value,type:$('#ct').value,adminUser:$('#cu').value,adminPass:$('#cp').value,theme:{accent:NT,mode:'auto'}});err='';R=r;$('#cn').value='';$('#cp').value='';await load()}catch(e){err=e.message;render()}}
+async function toggle(slug,active){if(!active&&!confirm('¿Suspender este negocio? Sus clientes no podrán entrar.'))return;try{await api('toggle',{slug,active});await load()}catch(e){toast(e.message)}}
+async function resetAdmin(slug){if(!confirm('¿Generar una contraseña temporal para el administrador de este negocio?'))return;
+ try{const r=await api('resetAdmin',{slug});prompt('Contraseña temporal del admin «'+r.adminUser+'» (cópiala):',r.tempPass)}catch(e){toast(e.message)}}
+async function rename(slug,old){const n=prompt('Nuevo nombre del negocio (el enlace y el QR no cambian):',old);if(!n||n.trim()===old)return;
+ try{await api('rename',{slug,name:n.trim()});toast('Nombre actualizado.');await load()}catch(e){toast(e.message)}}
+async function del(slug,name){const c=prompt('ELIMINAR «'+name+'»\nSus clientes dejarán de poder entrar. Los datos se guardan aparte en el servidor (data/deleted).\n\nEscribe el nombre exacto para confirmar:');
+ if(c===null)return;try{const r=await api('delete',{slug,confirm:c});toast('Negocio eliminado. Datos guardados en '+r.kept);Q=null;await load()}catch(e){toast(e.message)}}
+function showQR(slug){Q=Q===slug?null:slug;render()}
+function copyLink(p){navigator.clipboard&&navigator.clipboard.writeText(url(p));toast('Enlace copiado')}
+function copy(p,u,pw){const t=`Tu app de citas: ${url(p)}\nUsuario: ${u}\nContraseña temporal: ${pw}\nAl entrar crearás tu contraseña privada.`;navigator.clipboard&&navigator.clipboard.writeText(t);toast('Mensaje copiado')}
+async function changePass(){if($('#pn').value!==$('#pn2').value)return toast('Las contraseñas nuevas no coinciden.');try{await api('changePass',{old:$('#po').value,new:$('#pn').value});toast('Contraseña actualizada.');$('#po').value=$('#pn').value=$('#pn2').value=''}catch(e){toast(e.message)}}
+
+function eyes(){document.querySelectorAll('input[type=password],input[data-pw]').forEach(i=>{if(i.dataset.eye)return;i.dataset.eye=1;i.dataset.pw=1;
+ const w=document.createElement('div');w.style.cssText='position:relative';i.parentNode.insertBefore(w,i);w.appendChild(i);i.style.paddingRight='48px';
+ const b=document.createElement('button');b.type='button';b.textContent='👁';b.title='Mostrar u ocultar la contraseña';b.setAttribute('aria-label','Mostrar u ocultar la contraseña');
+ b.style.cssText='position:absolute;right:4px;top:9px;border:0;background:none;padding:6px 8px;font-size:18px;cursor:pointer';
+ b.onclick=()=>{const show=i.type==='password';i.type=show?'text':'password';b.textContent=show?'🙈':'👁'};w.appendChild(b)})}
+{const _r=render;render=function(){const sn={};document.querySelectorAll('#app input,#app select').forEach(i=>{if(i.id&&i.type!=='file')sn[i.id]=i.value});
+ _r();Object.entries(sn).forEach(([k,v])=>{const e=document.getElementById(k);if(e&&!e.value)e.value=v});eyes()}}
+{const _r=render;render=function(){const sn={};document.querySelectorAll('#app input,#app select').forEach(i=>{if(i.id&&i.type!=='file')sn[i.id]=i.value});
+ _r();Object.entries(sn).forEach(([k,v])=>{const e=document.getElementById(k);if(e)e.value=v})}}
+
+boot();setInterval(()=>{if(AUTH&&!document.hidden&&!/INPUT|SELECT/.test(document.activeElement.tagName))load()},30000);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/master/sw.js', {
+      scope: '/master/'
+    }).catch(error => {
+      console.error('Error registrando la PWA Master:', error);
+    });
+  });
+}
+
+</script></body></html>
