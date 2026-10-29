@@ -114,7 +114,7 @@ async function doChange(){const p=$('#cp').value.trim(),a=$('#c1').value,b=$('#c
 async function resetUser(id){try{const r=await api('masterReset',{uid:id});MS=`Contraseña temporal de ${nameOf(id)}: ${r.tmp} (deberá cambiarla al entrar)`}catch(e){MS='Error: '+e.message}render()}
 function masterV(){const T=[['cuentas','Cuentas'],['mcitas','Citas'],['neg','Negocio']];if(!T.some(t=>t[0]===tab))tab='cuentas';const rows=Object.entries(D.prof);
  const body=tab==='cuentas'?rows.map(([id,u])=>`<div class="card"><b>${esc(u.name)}</b> <span class="mu">@${esc(u.username||'')} · ${esc(u.phone||'sin teléfono')}</span><br><br><button onclick="resetUser('${id}')">Restablecer contraseña</button></div>`).join('')||'<div class="card mu">Sin cuentas.</div>'
- :tab==='mcitas'?[...D.appts].sort((a,b)=>start(b)-start(a)).map(a=>`<div class="card"><b>${esc(a.svc)} · $${a.price}</b> <span class="bd ${SL(a.status)[1]}">${SL(a.status)[0]}</span><br>${fmt(a)}<div class="mu">${esc(nameOf(a.client))} · ${((PAY.find(x=>x[0]===a.pay)||[])[1]||'')}</div></div>`).join('')||'<div class="card mu">Sin citas.</div>'
+ :tab==='mcitas'?[...D.appts].sort((a,b)=>start(b)-start(a)).map(a=>`<div class="card"><b>${esc(a.svc)} · $${a.price}</b> <span class="bd ${stL[a.status][1]}">${stL[a.status][0]}</span><br>${fmt(a)}<div class="mu">${esc(nameOf(a.client))} · ${PAY.find(x=>x[0]===a.pay)[1]}</div></div>`).join('')||'<div class="card mu">Sin citas.</div>'
  :`<div class="card"><b>${esc(D.cfg?.biz||'Sin configurar')}</b><div class="mu">Servicio: ${esc(D.cfg?.type||'-')} · Horario ${D.cfg?.from}–${D.cfg?.to} · Reservas ${D.cfg?.open===false?'pausadas':'activas'}<br>Citas: ${D.appts.length} · Cuentas: ${rows.length}</div></div>${passCard()}`;
  return `<div class="top"><div><h1>🛠 Soporte Master</h1><div class="mu">Acceso de solo lectura + restablecer contraseñas</div></div><button onclick="logout()">Salir</button></div>
  <div class="tabs">${T.map(t=>`<button class="${tab===t[0]?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('')}</div>${MS?`<div class="card s-pend">${esc(MS)}</div>`:''}${body}`}
@@ -185,11 +185,10 @@ function submitB(){const sv=D.cfg.svc.find(s=>s.id===bk.svc),dg=bk.pay!=='efecti
   await notif(meId,dg?`Recibimos tu pago. Te avisaremos cuando sea verificado. Cita: ${fmt(a)}.`:`Cita reservada: ${a.svc}, ${fmt(a)}. Pagas en efectivo en el local.`);
   bk={};tab='mis';render()})}
 const stL={pendiente:['Pago en verificación','s-pend'],confirmada:['Confirmada','s-ok'],reservada:['Reservada (efectivo)','s-ok'],completada:['Completada','s-ok'],cancelada:['Cancelada','s-no'],rechazada:['Pago rechazado','s-no']};
-const SL=s=>stL[s]||['Desconocido','s-pend'];
 const canDone=a=>(a.status==='confirmada'||a.status==='reservada')&&(isAdm||start(a)<=new Date());
 function stars(a){const r=a.rating||0;return `<div>${[1,2,3,4,5].map(n=>`<button class="st ${n<=r?'on':''}" ${a.client!==meId||a.rating?'disabled':''} onclick="rate('${a.id}',${n})">★</button>`).join('')}</div>`}
 function misV(){const l=D.appts.filter(a=>a.client===meId).sort((a,b)=>start(a)-start(b));
- return l.length?l.map(a=>`<div class="card"><div class="top"><b>${esc(a.svc)} · $${a.price}</b><span class="bd ${SL(a.status)[1]}">${SL(a.status)[0]}</span></div>${fmt(a)}
+ return l.length?l.map(a=>`<div class="card"><div class="top"><b>${esc(a.svc)} · $${a.price}</b><span class="bd ${stL[a.status][1]}">${stL[a.status][0]}</span></div>${fmt(a)}
  <div class="row" style="margin-top:8px">${canDone(a)?`<button class="ok" onclick="finish('${a.id}')">✔ Finalizar cita</button>`:''}${active(a)&&a.status!=='completada'&&start(a)>new Date()?`<button class="er" onclick="cancelA('${a.id}')">Cancelar</button>`:''}</div>
  ${a.status==='completada'?`<div class="mu" style="margin-top:8px">${a.rating?'Tu evaluación:':'Evalúa el servicio:'}</div>${stars(a)}${a.rating?(a.comment?`<div class="mu">“${esc(a.comment)}”</div>`:''):`<input placeholder="Comentario (opcional)" oninput="cm['${a.id}']=this.value">`}`:''}</div>`).join(''):'<div class="card mu">Aún no tienes citas.</div>'}
 function finish(id){safe(async()=>{const a=D.appts.find(x=>x.id===id);await db.doc('appts/'+id).update({status:'completada',doneBy:isAdm?'admin':'cliente',doneAt:Date.now()});
@@ -223,8 +222,8 @@ function panelV(){const n=new Date(),td=ymd(n),mk=td.slice(0,7),pk=ymd(new Date(
 function saveRates(){safe(()=>db.doc('cfg/main').update({rateType:$('#rtp').value}))}
 function toggleOpen(){safe(()=>db.doc('cfg/main').update({open:D.cfg.open===false,closedMsg:$('#cmsg').value.trim()}))}
 function citasV(){const now=new Date(),sorted=[...D.appts].sort((a,b)=>start(a)-start(b)),up=sorted.filter(a=>active(a)&&a.status!=='completada'),hi=sorted.filter(a=>!up.includes(a)).reverse();
- const card=a=>{const p=D.pay[a.id],pr=D.prof[a.client]||{};return `<div class="card"><div class="top"><b>${esc(a.svc)} · $${a.price}</b><span class="bd ${SL(a.status)[1]}">${SL(a.status)[0]}</span></div>${fmt(a)}<br>
- <span class="mu">${esc(pr.name||'Cliente')} · ${esc(pr.phone||'')} · ${((PAY.find(x=>x[0]===a.pay)||[])[1]||'')}</span>
+ const card=a=>{const p=D.pay[a.id],pr=D.prof[a.client]||{};return `<div class="card"><div class="top"><b>${esc(a.svc)} · $${a.price}</b><span class="bd ${stL[a.status][1]}">${stL[a.status][0]}</span></div>${fmt(a)}<br>
+ <span class="mu">${esc(pr.name||'Cliente')} · ${esc(pr.phone||'')} · ${PAY.find(x=>x[0]===a.pay)[1]}</span>
  ${a.bsAmt?`<div class="mu">Monto: $${a.price} = Bs. ${a.bsAmt} (tasa ${a.rate})</div>`:''}${p?`<div class="mu">Ref: ${esc(p.ref)} · Banco: ${esc(p.bank)} · Titular: ${esc(p.payName)} · C.I.: ${esc(p.ci)}</div>`:''}${a.rating?`<div>${'★'.repeat(a.rating)}${'☆'.repeat(5-a.rating)} <span class="mu">${esc(a.comment||'')}</span></div>`:''}
  <div class="row" style="margin-top:8px">${a.status==='pendiente'?`<button class="ok" onclick="verify('${a.id}')">✔ Confirmar pago</button><button class="er" onclick="reject('${a.id}')">Rechazar</button>`:''}${canDone(a)?`<button class="ok" onclick="finish('${a.id}')">✔ Finalizar cita</button>`:''}${active(a)&&a.status!=='completada'?`<button class="er" onclick="cancelA('${a.id}')">Cancelar</button>`:''}</div></div>`};
  return `<h2>Próximas</h2>${up.map(card).join('')||'<div class="card mu">Sin citas pendientes.</div>'}<h2>Historial</h2>${hi.map(card).join('')||'<div class="card mu">Vacío.</div>'}`}
@@ -244,7 +243,7 @@ function agendaV(){const d=bk.bd||ymd(new Date());
  <div class="row"><button onclick="blk('${d}','all')">${D.blocks.some(x=>x.date===d&&x.time==='all')?'Liberar día completo':'Bloquear día completo'}</button></div></div>`}
 function blk(d,t){safe(async()=>{const r=db.doc('blocks/'+aid(d,t==='all'?'all':t));D.blocks.some(x=>x.date===d&&x.time===t)?await r.delete():await r.set({date:d,time:t})})}
 function clientesV(){const cl=Object.entries(D.prof).filter(([id])=>id!==meId);return (MS?`<div class="card s-pend">${esc(MS)}</div>`:'')+(cl.length?cl.map(([id,u])=>{const l=D.appts.filter(a=>a.client===id&&active(a)).sort((a,b)=>start(a)-start(b));
- return `<div class="card"><b>${esc(u.name)}</b> <span class="mu">${esc(u.phone||'')} · C.I. ${esc(u.ci||'–')}</span>${l.map(a=>`<div class="mu">• ${esc(a.svc)} – ${fmt(a)} (${SL(a.status)[0]})</div>`).join('')||'<div class="mu">Sin citas activas</div>'}<br><button onclick="resetClient('${id}')">Restablecer contraseña</button></div>`}).join(''):'<div class="card mu">Aún no hay clientes registrados.</div>')}
+ return `<div class="card"><b>${esc(u.name)}</b> <span class="mu">${esc(u.phone||'')} · C.I. ${esc(u.ci||'–')}</span>${l.map(a=>`<div class="mu">• ${esc(a.svc)} – ${fmt(a)} (${stL[a.status][0]})</div>`).join('')||'<div class="mu">Sin citas activas</div>'}<br><button onclick="resetClient('${id}')">Restablecer contraseña</button></div>`}).join(''):'<div class="card mu">Aún no hay clientes registrados.</div>')}
 function avisosV(){const l=(isAdm?D.anotifs:D.notifs).sort((a,b)=>b.ts-a.ts);const col=isAdm?'anotifs':'notifs';
  setTimeout(()=>{l.filter(n=>!n.read).forEach(n=>{n.read=true;db.doc(col+'/'+n.id).update({read:true}).catch(()=>{})})},2000);
  return l.length?l.map(n=>{const a=n.apptId&&D.appts.find(x=>x.id===n.apptId);return `<div class="card n ${n.read?'r':''}">${esc(n.text)}<div class="mu">${new Date(n.ts).toLocaleString('es')}</div>

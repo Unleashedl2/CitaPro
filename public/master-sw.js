@@ -1,22 +1,20 @@
-const C = 'citapro-master-v1';
 
-self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('install', event => {
+  self.skipWaiting();
+});
 
-self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+self.addEventListener('activate', event => {
+  event.waitUntil(self.clients.claim());
+});
 
-self.addEventListener('fetch', e => {
-  const u = new URL(e.request.url);
-  // Ignorar métodos que no sean GET, peticiones externas o llamadas a la API
-  if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.includes('/api')) return;
+// Master siempre consulta al servidor.
+// No se almacenan en caché las pantallas ni los datos de administración.
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
 
-  e.respondWith(
-    fetch(e.request).catch(async () => {
-      const cached = await caches.match(e.request);
-      // Si está en caché lo devuelve, de lo contrario devuelve una respuesta de respaldo para que la app no colapse
-      return cached || new Response('Sin conexión a internet', {
-        status: 503,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-      });
-    })
-  );
+  const url = new URL(event.request.url);
+
+  if (url.origin !== self.location.origin) return;
+
+  event.respondWith(fetch(event.request));
 });
