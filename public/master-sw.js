@@ -1,20 +1,6 @@
-
-self.addEventListener('install', event => {
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
-});
-
-// Master siempre consulta al servidor.
-// No se almacenan en caché las pantallas ni los datos de administración.
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-
-  const url = new URL(event.request.url);
-
-  if (url.origin !== self.location.origin) return;
-
-  event.respondWith(fetch(event.request));
-});
+const C='citapro-master-v1';
+self.addEventListener('install',()=>self.skipWaiting());
+self.addEventListener('activate',e=>e.waitUntil(clients.claim()));
+self.addEventListener('fetch',e=>{const u=new URL(e.request.url);
+ if(e.request.method!=='GET'||u.origin!==location.origin||u.pathname.includes('/api'))return;
+ e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))});
