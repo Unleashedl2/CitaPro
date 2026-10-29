@@ -1,5 +1,10 @@
-flask>=3.0
+flask==3.0.0
 waitress>=3.0
 tzdata>=2024.1
 cryptography>=42
 pywebpush>=2.0
+gunicorn
+werkzeug==3.0.1
+jinja2==3.1.2
+itsdangerous==2.1.2
+markupsafe==2.1.1

@@ -266,8 +266,8 @@ def snapshot(inp, uid, role):
     for x in appts:
         d = x.get('date', '')
         if not (lo <= d <= hi): continue
-        # el administrador recibe la cita completa (pagos, montos, evaluaciones); el cliente solo horario y estado de terceros
-        pub[x['id']] = x if role != 'client' else {'id': x['id'], 'date': d, 'time': x.get('time'), 'status': x.get('status')}
+        pub[x['id']] = {'id': x['id'], 'date': d, 'time': x.get('time'), 'status': x.get('status'), 'svcId': x.get('svcId'), 'svc': x.get('svc'),
+                        'client': x.get('client')} if role != 'client' else {'id': x['id'], 'date': d, 'time': x.get('time'), 'status': x.get('status')}
     if role == 'client':
         out_appts = []
         for x in appts:

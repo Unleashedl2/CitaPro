@@ -5,9 +5,9 @@ Una sola instalación sirve a todos tus clientes (barberías, peluquerías, mani
 sus clientes, sus servicios, sus fotos y su propio enlace con código QR.
 
 ```
-https://citapro-j784.onrender.com/master/                ← tu sala de control (solo tú, cuenta Master)
-https://citapro-j784.onrender.com/barberia-don-pepe/      ← app de ese negocio (enlace + QR para sus clientes)
-https://citapro-j784.onrender.com/unas-bella/             ← app de otro negocio
+https://beta1.fjmsystem.com/master/                 ← tu sala de control (solo tú, cuenta Master)
+https://beta1.fjmsystem.com/barberia-don-pepe/      ← app de ese negocio (enlace + QR para sus clientes)
+https://beta1.fjmsystem.com/unas-bella/             ← app de otro negocio
 ```
 
 ## Comandos (`main.py`)
