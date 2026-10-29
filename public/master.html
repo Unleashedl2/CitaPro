@@ -3,11 +3,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CitaPro – Sala de control</title><meta name="robots" content="noindex">
 
-<link rel="manifest" href="/master/manifest.webmanifest">
+<link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#b4532a">
 <meta name="application-name" content="CitaPro Master">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="icon" href="/master/icon-192.png" type="image/png">
+<link rel="icon" href="/icon-192.png" type="image/png">
 <style>
 :root{--bg:#faf7f2;--card:#fff;--tx:#1f1b16;--mu:#6f675d;--ac:#b4532a;--ac2:#fff;--bd:#e6ded2;--ok:#2f7d4f;--wa:#b7791f;--er:#b3261e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#16130f;--card:#221e19;--tx:#f3ece2;--mu:#a69c8e;--ac:#e07a4a;--ac2:#1a1209;--bd:#3a332b;--ok:#5cc489;--wa:#e2b45a;--er:#ff8a80;color-scheme:dark}}
@@ -100,8 +100,6 @@ const fd=s=>{const[y,m,d]=String(s||'').split('-');return d&&m&&y?d+'/'+m+'/'+y:
 function billLine(t){const b=t.billing||{};const bad=b.estado==='vencido'||b.estado==='por_vencer';const col=bad?'var(--er)':'var(--ok)';
  const txt=b.estado==='vencido'?'⛔ VENCIDO desde '+fd(b.vence):'Vence el '+fd(b.vence)+(b.estado==='por_vencer'?' · faltan '+b.dias_restantes+' día(s)':'');
  return `<div class="row" style="margin-top:8px"><b style="color:${col}">${txt}</b><span class="mu">Último pago: ${fd(b.ultimo_pago)}${b.ref?' · ref. '+esc(b.ref):''}</span><button class="p" onclick="regPay('${t.slug}')">Registrar pago</button></div>`}
-async function regPay(slug){const amount=prompt('Monto pagado (USD):');if(amount===null)return;const ref=prompt('Número de referencia del pago:');if(ref===null)return;
- try{const r=await api('pay',{slug,amount,ref});toast('Pago registrado. Nuevo vencimiento: '+fd(r.billing.vence));await load()}catch(e){toast(e.message)}}
 let WA={configured:false,on:false};
 const waCard=()=>`<div class="card"><div class="top"><b>Recordatorios de vencimiento por WhatsApp</b><button class="${WA.on?'er':'ok'}" onclick="waToggle(${!WA.on})">${WA.on?'Desactivar':'Activar'}</button></div>
  <div class="mu">${!WA.configured?'<span class="no">WhatsApp no está configurado en el servidor (WA_TOKEN / WA_PHONE_ID).</span>':(WA.on?'<span class="ok">Activado:</span> el administrador recibe el aviso de vencimiento por WhatsApp.':'<span class="no">Desactivado:</span> solo se envían avisos dentro de la app y notificaciones push.')}</div>
@@ -125,7 +123,7 @@ async function toggle(slug,active){if(!active&&!confirm('¿Suspender este negoci
 async function resetAdmin(slug){if(!confirm('¿Generar una contraseña temporal para el administrador de este negocio?'))return;
  try{const r=await api('resetAdmin',{slug});prompt('Contraseña temporal del admin «'+r.adminUser+'» (cópiala):',r.tempPass)}catch(e){toast(e.message)}}
 async function rename(slug,old){const n=prompt('Nuevo nombre del negocio (el enlace y el QR no cambian):',old);if(!n||n.trim()===old)return;
- try{await api('rename',{slug,name:n.trim()});toast('Nombre actualizado.');await load()}catch(e){toast(e.message)}}
+ try{const r=await api('rename',{slug,name:n.trim()});toast('Nombre actualizado.');await load()}catch(e){toast(e.message)}}
 async function del(slug,name){const c=prompt('ELIMINAR «'+name+'»\nSus clientes dejarán de poder entrar. Los datos se guardan aparte en el servidor (data/deleted).\n\nEscribe el nombre exacto para confirmar:');
  if(c===null)return;try{const r=await api('delete',{slug,confirm:c});toast('Negocio eliminado. Datos guardados en '+r.kept);Q=null;await load()}catch(e){toast(e.message)}}
 function showQR(slug){Q=Q===slug?null:slug;render()}
@@ -147,8 +145,8 @@ boot();setInterval(()=>{if(AUTH&&!document.hidden&&!/INPUT|SELECT/.test(document
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/master/sw.js', {
-      scope: '/master/'
+    navigator.serviceWorker.register('/master-sw.js', {
+      scope: '/'
     }).catch(error => {
       console.error('Error registrando la PWA Master:', error);
     });
