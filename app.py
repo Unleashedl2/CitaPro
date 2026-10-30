@@ -267,30 +267,30 @@ def snapshot(inp, uid, role):
         d = x.get('date', '')
         if not (lo <= d <= hi): continue
         if role != 'client':
-    pub[x['id']] = {
-        'id': x['id'],
-        'date': d,
-        'time': x.get('time'),
-        'status': x.get('status'),
-        'svcId': x.get('svcId'),
-        'svc': x.get('svc'),
-        'price': x.get('price'),
-        'pay': x.get('pay'),
-        'bsAmt': x.get('bsAmt'),
-        'rate': x.get('rate'),
-        'rtype': x.get('rtype'),
-        'client': x.get('client'),
-        'created': x.get('created'),
-        'rating': x.get('rating'),
-        'comment': x.get('comment')
-    }
-else:
-    pub[x['id']] = {
-        'id': x['id'],
-        'date': d,
-        'time': x.get('time'),
-        'status': x.get('status')
-    }
+            pub[x['id']] = {
+                'id': x['id'],
+                'date': d,
+                'time': x.get('time'),
+                'status': x.get('status'),
+                'svcId': x.get('svcId'),
+                'svc': x.get('svc'),
+                'price': x.get('price'),
+                'pay': x.get('pay'),
+                'bsAmt': x.get('bsAmt'),
+                'rate': x.get('rate'),
+                'rtype': x.get('rtype'),
+                'client': x.get('client'),
+                'created': x.get('created'),
+                'rating': x.get('rating'),
+                'comment': x.get('comment')
+            }
+        else:
+            pub[x['id']] = {
+                'id': x['id'],
+                'date': d,
+                'time': x.get('time'),
+                'status': x.get('status')
+            }
     if role == 'client':
         out_appts = []
         for x in appts:
