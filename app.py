@@ -376,7 +376,8 @@ def can_write(op, col, id_, old, new, u):
             if not cfg or cfg.get('open', True) is False: return no
             sv = next((x for x in cfg.get('svc', []) if x.get('id') == new.get('svcId')), None)
             d, t = s(new.get('date')), s(new.get('time'))
-            if not sv or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', d) or not re.fullmatch(r'\d{2}:00', t): return no
+            # MODIFICACION 1: \d{2}:\d{2} permite cualquier minuto
+            if not sv or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', d) or not re.fullmatch(r'\d{2}:\d{2}', t): return no
             h = int(t[:2])
             try: ts = local_ts(d, t)
             except ValueError: return no
