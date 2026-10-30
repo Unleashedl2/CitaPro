@@ -104,7 +104,6 @@ function masterV(){const T=[['cuentas','Cuentas'],['mcitas','Citas'],['neg','Neg
  return `<div class="top"><div><h1>🛠 Soporte Master</h1><div class="mu">Acceso de solo lectura + restablecer contraseñas</div></div><button onclick="logout()">Salir</button></div>
  <div class="tabs">${T.map(t=>`<button class="${tab===t[0]?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('')}</div>${MS?`<div class="card s-pend">${esc(MS)}</div>`:''}${body}`}
 
-/* ACTUALIZACIÓN: Inyección de color para la meta etiqueta y CSS */
 async function refresh(force){if(!meId)return;try{const j=await api('snapshot',{rev:force?0:rev});if(j.same)return;rev=j.rev;
  [...j.notifs.map(n=>['n',n]),...j.anotifs.map(n=>['a',n])].forEach(([k,n])=>{const key=k+n.id;if(!seenN.has(key)){seenN.add(key);if(ready&&n.ts>t0)toast(n.text)}});
  D={cfg:j.cfg,appts:j.appts,blocks:j.blocks,notifs:j.notifs,anotifs:j.anotifs,prof:j.prof,pay:j.pay};
@@ -151,8 +150,7 @@ function profV(){return `<h1>Tus datos</h1><p class="mu">Se guardan en la base d
 function saveProf(){const p={name:$('#pn').value.trim(),phone:$('#pt').value.trim(),ci:$('#pc').value.trim()};if(!p.name||!p.phone)return toast('Completa nombre y teléfono.');
  safe(async()=>{await db.doc('profiles/'+meId).set(p);prof=p;render()})}
 
-/* cliente */
-/* ACTUALIZACIÓN: Reloj libre añadido al cliente */
+/* cliente: Selección de hora mediante botones y campo de hora libre editable */
 function bookV(){if(D.cfg.open===false)return '<div class="card mu">Las reservas están pausadas por ahora.</div>';
  const d=viewM,y=d.getFullYear(),m=d.getMonth(),first=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),today=ymd(new Date());
  let cells='';for(let i=0;i<first;i++)cells+='<span></span>';
@@ -162,7 +160,7 @@ function bookV(){if(D.cfg.open===false)return '<div class="card mu">Las reservas
  <h2>2. Día</h2><div class="card"><div class="top" style="margin-bottom:8px"><button onclick="viewM=new Date(${y},${m-1},1);render()">‹</button><b>${d.toLocaleDateString('es',{month:'long',year:'numeric'})}</b><button onclick="viewM=new Date(${y},${m+1},1);render()">›</button></div>
  <div class="cal">${['L','M','M','J','V','S','D'].map(x=>`<div class="h">${x}</div>`).join('')}${cells}</div></div>
  ${bk.date?`<h2>3. Hora</h2><div class="grid">${slots().map(t=>{const[yy,mm,dd]=bk.date.split('-').map(Number),past=new Date(yy,mm-1,dd,+t.slice(0,2))<=new Date();return `<button class="${bk.time===t?'p':''}" ${past||taken(bk.date,t)?'disabled':''} onclick="bk.time='${t}';render()">${t}</button>`}).join('')}</div>
- <div class="card" style="margin-top:12px; padding:10px;"><label>O ingresa una hora específica:</label><input type="time" value="${bk.time||''}" onchange="bk.time=this.value;render()"></div>`:''}
+ <div class="card" style="margin-top:12px; padding:10px;"><label>O escribe/ajusta la hora exacta:</label><input type="time" value="${bk.time||''}" onchange="bk.time=this.value;render()"></div>`:''}
  ${bk.time?`<h2>4. Método de pago</h2><div class="grid">${PAY.map(p=>`<button class="opt ${bk.pay===p[0]?'on':''}" onclick="bk.pay='${p[0]}';render()"><div class="t">${p[2]}<br>${p[1]}</div></button>`).join('')}</div>
  ${dg?`<div class="card">${amtV(sv)}${D.cfg.payInfo?`<div class="mu">Datos para pagar:</div><div style="white-space:pre-wrap;margin-bottom:10px"><b>${esc(D.cfg.payInfo)}</b></div>`:''}
  <label>Número de referencia</label><input value="${esc(bk.ref)}" oninput="bk.ref=this.value"><label>Banco utilizado</label><input value="${esc(bk.bank)}" oninput="bk.bank=this.value">
@@ -226,8 +224,6 @@ function servV(){return `<p class="mu">Edita nombres, precios y fotos de present
 async function up(i,f){if(!f||!assets)return toast('No se puede subir la foto.');safe(async()=>{const bm=await createImageBitmap(f),k=Math.min(1,700/bm.width),c=document.createElement('canvas');c.width=bm.width*k;c.height=bm.height*k;c.getContext('2d').drawImage(bm,0,0,c.width,c.height);
  const b=await new Promise(r=>c.toBlob(r,'image/jpeg',.8)),r=await assets.upload(b);ES[i].img=r.id;render()})}
 function saveServ(){safe(async()=>{await db.doc('cfg/main').update({svc:ES});toast('Servicios guardados.')})}
-
-/* ACTUALIZACIÓN: Reloj libre añadido a la vista de bloqueo del admin */
 function agendaV(){const d=bk.bd||ymd(new Date());
  return `<div class="card"><label>Fecha</label><input type="date" min="${ymd(new Date())}" value="${d}" onchange="bk.bd=this.value;render()"><div class="grid">${slots().map(t=>{const b=D.blocks.some(x=>x.date===d&&x.time===t),ap=D.appts.some(a=>a.id===aid(d,t)&&active(a));
  return `<button class="${b?'p':''}" ${ap?'disabled':''} onclick="blk('${d}','${t}')">${t}${ap?' · cita':b?' · bloq.':''}</button>`}).join('')}</div><br>
