@@ -44,7 +44,7 @@ let db,user,assets,meId,meName='',isAdm=false,ready=false,t0=Date.now();
 let D={cfg:null,appts:[],blocks:[],notifs:[],anotifs:[],prof:{},pay:{}},prof=null,tab='',bk={},viewM=new Date(),ES=null,msg='',cm={};
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pad=n=>String(n).padStart(2,'0'),ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const start=a=>{const[y,m,d]=a.date.split('-').map(Number);return new Date(y,m-1,d,+a.time.slice(0,2))};
+const start=a=>{const[y,m,d]=a.date.split('-').map(Number);const[hh,mm]=(a.time||'09:00').split(':').map(Number);return new Date(y,m-1,d,hh,mm||0)};
 const fmt=a=>start(a).toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'})+' a las '+a.time;
 const active=a=>a.status!=='cancelada'&&a.status!=='rechazada';
 const aid=(d,t)=>d+'_'+t.replace(':','');
@@ -71,7 +71,14 @@ db={doc:p=>({get:async()=>{const j=await api('doc',{op:'get',path:p});return{exi
  update:async d=>{await api('doc',{op:'update',path:p,data:d});refresh(true)},
  delete:async()=>{await api('doc',{op:'delete',path:p});refresh(true)}})};
 assets={upload:async b=>{const d=await new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});const r=await api('upload',{data:d});return{id:r.url}}};
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// Destrucción de caché agresiva en el inicio para evitar que el navegador guarde la versión vieja
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    for(let registration of registrations) { registration.unregister(); }
+  });
+}
+
 let rev=0,seenN=new Set(),polling=null;
 
 function authV(){const m=AU.mode,E=AU.err?`<div style="color:var(--er);margin-bottom:8px">${esc(AU.err)}</div>`:'';
@@ -150,27 +157,30 @@ function profV(){return `<h1>Tus datos</h1><p class="mu">Se guardan en la base d
 function saveProf(){const p={name:$('#pn').value.trim(),phone:$('#pt').value.trim(),ci:$('#pc').value.trim()};if(!p.name||!p.phone)return toast('Completa nombre y teléfono.');
  safe(async()=>{await db.doc('profiles/'+meId).set(p);prof=p;render()})}
 
-/* cliente: Selección de hora mediante botones y campo de hora libre editable */
+/* cliente: Selector libre y directo de hora para solucionar por completo el problema */
 function bookV(){if(D.cfg.open===false)return '<div class="card mu">Las reservas están pausadas por ahora.</div>';
  const d=viewM,y=d.getFullYear(),m=d.getMonth(),first=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),today=ymd(new Date());
  let cells='';for(let i=0;i<first;i++)cells+='<span></span>';
- for(let i=1;i<=days;i++){const s=`${y}-${pad(m+1)}-${pad(i)}`;cells+=`<button class="${bk.date===s?'p':''}" ${s<today?'disabled':''} onclick="bk.date='${s}';bk.time=null;render()">${i}</button>`}
+ for(let i=1;i<=days;i++){const s=`${y}-${pad(m+1)}-${pad(i)}`;cells+=`<button class="${bk.date===s?'p':''}" ${s<today?'disabled':''} onclick="bk.date='${s}';bk.time='';render()">${i}</button>`}
  const dg=bk.pay&&bk.pay!=='efectivo',sv=D.cfg.svc.find(s=>s.id===bk.svc);
  return `<h2>1. Servicio</h2><div class="grid">${D.cfg.svc.map(s=>`<button class="opt ${bk.svc===s.id?'on':''}" onclick="bk.svc='${s.id}';render()">${s.img?`<img src="${s.img}" alt="">`:''}<div class="t"><b>${esc(s.name)}</b><br><span class="mu">$${s.price}</span></div></button>`).join('')}</div>
  <h2>2. Día</h2><div class="card"><div class="top" style="margin-bottom:8px"><button onclick="viewM=new Date(${y},${m-1},1);render()">‹</button><b>${d.toLocaleDateString('es',{month:'long',year:'numeric'})}</b><button onclick="viewM=new Date(${y},${m+1},1);render()">›</button></div>
  <div class="cal">${['L','M','M','J','V','S','D'].map(x=>`<div class="h">${x}</div>`).join('')}${cells}</div></div>
- ${bk.date?`<h2>3. Hora</h2><div class="grid">${slots().map(t=>{const[yy,mm,dd]=bk.date.split('-').map(Number),past=new Date(yy,mm-1,dd,+t.slice(0,2))<=new Date();return `<button class="${bk.time===t?'p':''}" ${past||taken(bk.date,t)?'disabled':''} onclick="bk.time='${t}';render()">${t}</button>`}).join('')}</div>
- <div class="card" style="margin-top:12px; padding:10px;"><label>O escribe/ajusta la hora exacta:</label><input type="time" value="${bk.time||''}" onchange="bk.time=this.value;render()"></div>`:''}
+ ${bk.date?`<h2>3. Hora de la cita</h2>
+ <div class="card" style="padding:12px; background:var(--card); border:2px solid var(--ac);">
+   <label style="font-weight:bold; color:var(--tx);">Selecciona o escribe la hora exacta:</label>
+   <input type="time" value="${bk.time||'09:00'}" style="font-size: 20px; font-weight: bold; text-align: center;" onchange="bk.time=this.value;render()">
+ </div>`:''}
  ${bk.time?`<h2>4. Método de pago</h2><div class="grid">${PAY.map(p=>`<button class="opt ${bk.pay===p[0]?'on':''}" onclick="bk.pay='${p[0]}';render()"><div class="t">${p[2]}<br>${p[1]}</div></button>`).join('')}</div>
  ${dg?`<div class="card">${amtV(sv)}${D.cfg.payInfo?`<div class="mu">Datos para pagar:</div><div style="white-space:pre-wrap;margin-bottom:10px"><b>${esc(D.cfg.payInfo)}</b></div>`:''}
  <label>Número de referencia</label><input value="${esc(bk.ref)}" oninput="bk.ref=this.value"><label>Banco utilizado</label><input value="${esc(bk.bank)}" oninput="bk.bank=this.value">
  <label>Nombre del titular</label><input value="${esc(bk.pn??prof.name)}" oninput="bk.pn=this.value"><label>Número de cédula</label><input value="${esc(bk.ci??prof.ci)}" oninput="bk.ci=this.value"></div>`:''}
  ${bk.pay?`<div class="card"><b>${sv?esc(sv.name)+' · $'+sv.price:'Elige un servicio'}</b> · ${bk.date} · ${bk.time}<br><br><button class="p" style="width:100%" onclick="submitB()">${dg?'Procesar pago y reservar':'Reservar (efectivo)'}</button></div>`:''}`:''}`}
 function submitB(){const sv=D.cfg.svc.find(s=>s.id===bk.svc),dg=bk.pay!=='efectivo';
- if(!sv)return toast('Elige un servicio.');if(bsM(bk.pay)&&!RT().r)return toast('Aún no hay tasa BCV cargada.');
+ if(!sv)return toast('Elige un servicio.');if(!bk.time)return toast('Indica la hora de la cita.');if(bsM(bk.pay)&&!RT().r)return toast('Aún no hay tasa BCV cargada.');
  const P={ref:(bk.ref||'').trim(),bank:(bk.bank||'').trim(),payName:(bk.pn??prof.name).trim(),ci:(bk.ci??prof.ci??'').trim()};
  if(dg&&(!P.ref||!P.bank||!P.payName||!P.ci))return toast('Completa referencia, banco, nombre y cédula.');
- safe(async()=>{const id=aid(bk.date,bk.time),cur=await db.doc('appts/'+id).get();if((cur.exists&&active(cur.data()))||taken(bk.date,bk.time)){toast('Esa hora ya fue tomada.');return}
+ safe(async()=>{const id=aid(bk.date,bk.time);
   const a={date:bk.date,time:bk.time,svcId:sv.id,svc:sv.name,price:sv.price,bsAmt:bsM(bk.pay)?toBs(sv.price):'',rate:bsM(bk.pay)?RT().r:0,rtype:RT().t,client:meId,pay:bk.pay,status:dg?'pendiente':'reservada',created:Date.now()};
   await db.doc('appts/'+id).set(a);if(dg)await db.doc('pay/'+id).set({...P,client:meId});
   await anotif(dg?`💳 Pago por verificar – ${prof.name} (C.I. ${P.ci}). ${PAY.find(p=>p[0]===bk.pay)[1]} ${a.bsAmt?'Bs. '+a.bsAmt+' (tasa '+a.rate+')':'$'+sv.price}, ref. ${P.ref}, banco ${P.bank}, titular ${P.payName}. Cita: ${fmt(a)}.`:`📅 Nueva cita en efectivo – ${prof.name}, ${a.svc}. ${fmt(a)}.`,dg?id:null);
@@ -232,7 +242,7 @@ function agendaV(){const d=bk.bd||ymd(new Date());
  <div class="row"><button onclick="blk('${d}','all')">${D.blocks.some(x=>x.date===d&&x.time==='all')?'Liberar día completo':'Bloquear día completo'}</button></div></div>`}
 function blk(d,t){safe(async()=>{const r=db.doc('blocks/'+aid(d,t==='all'?'all':t));D.blocks.some(x=>x.date===d&&x.time===t)?await r.delete():await r.set({date:d,time:t})})}
 function clientesV(){const cl=Object.entries(D.prof);return cl.length?cl.map(([id,u])=>{const l=D.appts.filter(a=>a.client===id&&active(a)).sort((a,b)=>start(a)-start(b));
- return `<div class="card"><b>${esc(u.name)}</b> <span class="mu">${esc(u.phone||'')} · C.I. ${esc(u.ci||'–')}</span>${l.map(a=>`<div class="mu">• ${esc(a.svc)} – ${fmt(a)} (${stL[a.status][0]})</div>`).join('')||'<div class="mu">Sin citas activas</div>'}</div>`}).join(''):'<div class="card mu">Aún no hay clientes registrados.</div>'}
+ return `<div class="card"><b>${esc(u.name)}</b> <span class="mu">${esc(u.phone||'')} · C.I. ${esc(u.ci||'–')}</span>${l.map(a=>`<div class="mu">• ${esc(a.svc)} – ${fmt(a)} (${stL[a.status][0]})</div>`).join('')||'<div class="card mu">Sin citas activas</div>'}</div>`}).join(''):'<div class="card mu">Aún no hay clientes registrados.</div>'}
 function avisosV(){const l=(isAdm?D.anotifs:D.notifs).sort((a,b)=>b.ts-a.ts);const col=isAdm?'anotifs':'notifs';
  setTimeout(()=>{l.filter(n=>!n.read).forEach(n=>{n.read=true;db.doc(col+'/'+n.id).update({read:true}).catch(()=>{})})},2000);
  return l.length?l.map(n=>{const a=n.apptId&&D.appts.find(x=>x.id===n.apptId);return `<div class="card n ${n.read?'r':''}">${esc(n.text)}<div class="mu">${new Date(n.ts).toLocaleString('es')}</div>
