@@ -103,10 +103,18 @@ function masterV(){const T=[['cuentas','Cuentas'],['mcitas','Citas'],['neg','Neg
  :`<div class="card"><b>${esc(D.cfg?.biz||'Sin configurar')}</b><div class="mu">Servicio: ${esc(D.cfg?.type||'-')} · Horario ${D.cfg?.from}–${D.cfg?.to} · Reservas ${D.cfg?.open===false?'pausadas':'activas'}<br>Citas: ${D.appts.length} · Cuentas: ${rows.length}</div></div>${passCard()}`;
  return `<div class="top"><div><h1>🛠 Soporte Master</h1><div class="mu">Acceso de solo lectura + restablecer contraseñas</div></div><button onclick="logout()">Salir</button></div>
  <div class="tabs">${T.map(t=>`<button class="${tab===t[0]?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('')}</div>${MS?`<div class="card s-pend">${esc(MS)}</div>`:''}${body}`}
+
+/* MODIFICACION 2: forzar al DOM a actualizar la meta etiqueta theme-color y las variables CSS */
 async function refresh(force){if(!meId)return;try{const j=await api('snapshot',{rev:force?0:rev});if(j.same)return;rev=j.rev;
  [...j.notifs.map(n=>['n',n]),...j.anotifs.map(n=>['a',n])].forEach(([k,n])=>{const key=k+n.id;if(!seenN.has(key)){seenN.add(key);if(ready&&n.ts>t0)toast(n.text)}});
  D={cfg:j.cfg,appts:j.appts,blocks:j.blocks,notifs:j.notifs,anotifs:j.anotifs,prof:j.prof,pay:j.pay};
+ if(D.cfg?.theme?.accent) {
+   document.documentElement.style.setProperty('--ac', D.cfg.theme.accent);
+   const metaTheme = document.querySelector('meta[name="theme-color"]');
+   if(metaTheme) metaTheme.setAttribute('content', D.cfg.theme.accent);
+ }
  if(!isAdm&&!isMaster)prof=j.prof[meId]||null;ready=true;render()}catch(e){if(e.status===401){meId=null;render()}}}
+
 async function startApp(){try{const j=await api('me');if(!j.user){meId=null;render();return}const u=j.user;
  if(u.mustChange){AU={mode:'change',err:''};meId=null;CU=u;render();return}
  AU={mode:'login',step:1,err:''};meId=u.id;meName=u.name||'';isMaster=u.role==='master';isAdm=u.role==='admin';tab='';ready=false;rev=0;
@@ -116,128 +124,19 @@ async function tick(){if(!D.cfg)return;const now=Date.now();
   if(isAdm&&!a.remA){a.remA=true;await safe(async()=>{await db.doc('appts/'+a.id).update({remA:true});await anotif(`⏰ Próxima cita a las ${a.time}: ${nameOf(a.client)} – ${a.svc}.`,a.id)})}
   if(a.client===meId&&!a.remC){a.remC=true;await safe(async()=>{await db.doc('appts/'+a.id).update({remC:true});await notif(meId,`⏰ Recordatorio: tu cita de ${a.svc} es a las ${a.time} (en menos de 1 hora).`)})}}}
 
-function render(){
- const A=$('#app');
-
- if(!meId){
-   A.innerHTML=authV();
-   return;
- }
-
- if(isMaster){
-   A.innerHTML=masterV();
-   return;
- }
-
- if(!D.cfg){
-   A.innerHTML=isAdm
-     ?setupV()
-     :'<div class="card">El negocio aún no ha sido configurado por el administrador.</div>';
-   return;
- }
-
- if(!isAdm&&!prof){
-   A.innerHTML=profV();
-   return;
- }
-
- const c=CAT[D.cfg.type];
-
- if(!c){
-   A.innerHTML='<div class="card">No se reconoce el tipo de negocio.</div>';
-   return;
- }
-
- if(!tab)tab=isAdm?'panel':'reservar';
-
- const T=isAdm
- ?[
-   ['panel','Panel'],
-   ['citas','Citas'],
-   ['serv','Servicios'],
-   ['agenda','Bloquear'],
-   ['clientes','Clientes'],
-   ['avisos','Avisos']
- ]
- :[
-   ['reservar','Reservar'],
-   ['mis','Mis citas'],
-   ['avisos','Avisos']
- ];
-
+function render(){const A=$('#app');if(!meId){A.innerHTML=authV();return}
+ if(isMaster){A.innerHTML=masterV();return}
+ if(!D.cfg){A.innerHTML=isAdm?setupV():'<div class="card">El negocio aún no ha sido configurado por el administrador.</div>';return}
+ if(!isAdm&&!prof){A.innerHTML=profV();return}
+ const c=CAT[D.cfg.type];if(!tab)tab=isAdm?'panel':'reservar';
+ const T=isAdm?[['panel','Panel'],['citas','Citas'],['serv','Servicios'],['agenda','Bloquear'],['clientes','Clientes'],['avisos','Avisos']]:[['reservar','Reservar'],['mis','Mis citas'],['avisos','Avisos']];
  const N=(isAdm?D.anotifs:D.notifs).filter(n=>!n.read).length;
-
- const views={
-   reservar:bookV,
-   mis:misV,
-   avisos:avisosV,
-   panel:panelV,
-   citas:citasV,
-   serv:servV,
-   agenda:agendaV,
-   clientes:clientesV
- };
-
- const view=views[tab];
- let content='';
-
- try{
-   if(typeof view!=='function'){
-     throw new Error('No existe la vista: '+tab);
-   }
-   content=view();
- }catch(e){
-   console.error('Error al abrir sección '+tab,e);
-   content=`
-     <div class="card s-no">
-       <b>No se pudo abrir esta sección.</b>
-       <p>${esc(e.message||'Error desconocido')}</p>
-       <button onclick="go('panel')">Volver al panel</button>
-     </div>
-   `;
- }
-
- A.innerHTML=`
- <div class="top">
-   <div>
-     <h1>${c.i} ${esc(D.cfg.biz)}</h1>
-     <div class="mu">${esc(isAdm?meName:prof.name)} · ${isAdm?'Administrador':'Cliente'}</div>
-   </div>
-   <div class="row">
-     ${(window.Notification&&Notification.permission==='default')
-       ?'<button onclick="enablePush()">Activar avisos</button>':''}
-     <button onclick="logout()">Salir</button>
-     <button class="bell" onclick="go('avisos')">🔔${N?`<i>${N}</i>`:''}</button>
-   </div>
- </div>
-
- ${D.cfg.open===false
-   ?`<div class="card s-no">⛔ ${esc(D.cfg.closedMsg||'Reservas pausadas por vacaciones.')}</div>`
-   :''}
-
+ A.innerHTML=`<div class="top"><div><h1>${c.i} ${esc(D.cfg.biz)}</h1><div class="mu">${esc(isAdm?meName:prof.name)} · ${isAdm?'Administrador':'Cliente'}</div></div><div class="row">${(window.Notification&&Notification.permission==='default')?'<button onclick="enablePush()">Activar avisos</button>':''}<button onclick="logout()">Salir</button><button class="bell" onclick="go('avisos')">🔔${N?`<i>${N}</i>`:''}</button></div></div>
+ ${D.cfg.open===false?`<div class="card s-no">⛔ ${esc(D.cfg.closedMsg||'Reservas pausadas por vacaciones.')}</div>`:''}
  <div style="color:var(--er)">${esc(msg)}</div>
-
- <div class="tabs">
-   ${T.map(t=>`
-     <button class="${tab===t[0]?'on':''}"
-       onclick="go('${t[0]}')">${t[1]}</button>
-   `).join('')}
- </div>
-
- ${content}
- `;
-}
-
-function go(t){
- tab=t;
- msg='';
-
- if(t==='serv'&&!ES){
-   ES=JSON.parse(JSON.stringify(D.cfg.svc));
- }
-
- render();
-}
+ <div class="tabs">${T.map(t=>`<button class="${tab===t[0]?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('')}</div>
+ ${({reservar:bookV,mis:misV,avisos:avisosV,panel:panelV,citas:citasV,serv:servV,agenda:agendaV,clientes:clientesV})[tab]()}`}
+function go(t){tab=t;msg='';if(t==='serv'&&!ES)ES=JSON.parse(JSON.stringify(D.cfg.svc));render()}
 
 /* setup / perfil */
 function setupV(){return `<h1>Configura tu negocio</h1><div class="card"><label>Nombre del negocio</label><input id="biz">
@@ -253,6 +152,7 @@ function saveProf(){const p={name:$('#pn').value.trim(),phone:$('#pt').value.tri
  safe(async()=>{await db.doc('profiles/'+meId).set(p);prof=p;render()})}
 
 /* cliente */
+/* MODIFICACION 1: Campo de texto libre para elegir cualquier hora */
 function bookV(){if(D.cfg.open===false)return '<div class="card mu">Las reservas están pausadas por ahora.</div>';
  const d=viewM,y=d.getFullYear(),m=d.getMonth(),first=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),today=ymd(new Date());
  let cells='';for(let i=0;i<first;i++)cells+='<span></span>';
@@ -261,7 +161,8 @@ function bookV(){if(D.cfg.open===false)return '<div class="card mu">Las reservas
  return `<h2>1. Servicio</h2><div class="grid">${D.cfg.svc.map(s=>`<button class="opt ${bk.svc===s.id?'on':''}" onclick="bk.svc='${s.id}';render()">${s.img?`<img src="${s.img}" alt="">`:''}<div class="t"><b>${esc(s.name)}</b><br><span class="mu">$${s.price}</span></div></button>`).join('')}</div>
  <h2>2. Día</h2><div class="card"><div class="top" style="margin-bottom:8px"><button onclick="viewM=new Date(${y},${m-1},1);render()">‹</button><b>${d.toLocaleDateString('es',{month:'long',year:'numeric'})}</b><button onclick="viewM=new Date(${y},${m+1},1);render()">›</button></div>
  <div class="cal">${['L','M','M','J','V','S','D'].map(x=>`<div class="h">${x}</div>`).join('')}${cells}</div></div>
- ${bk.date?`<h2>3. Hora</h2><div class="grid">${slots().map(t=>{const[yy,mm,dd]=bk.date.split('-').map(Number),past=new Date(yy,mm-1,dd,+t.slice(0,2))<=new Date();return `<button class="${bk.time===t?'p':''}" ${past||taken(bk.date,t)?'disabled':''} onclick="bk.time='${t}';render()">${t}</button>`}).join('')}</div>`:''}
+ ${bk.date?`<h2>3. Hora</h2><div class="grid">${slots().map(t=>{const[yy,mm,dd]=bk.date.split('-').map(Number),past=new Date(yy,mm-1,dd,+t.slice(0,2))<=new Date();return `<button class="${bk.time===t?'p':''}" ${past||taken(bk.date,t)?'disabled':''} onclick="bk.time='${t}';render()">${t}</button>`}).join('')}</div>
+ <div class="card" style="margin-top:12px; padding:10px;"><label>O ingresa una hora específica:</label><input type="time" value="${bk.time||''}" onchange="bk.time=this.value;render()"></div>`:''}
  ${bk.time?`<h2>4. Método de pago</h2><div class="grid">${PAY.map(p=>`<button class="opt ${bk.pay===p[0]?'on':''}" onclick="bk.pay='${p[0]}';render()"><div class="t">${p[2]}<br>${p[1]}</div></button>`).join('')}</div>
  ${dg?`<div class="card">${amtV(sv)}${D.cfg.payInfo?`<div class="mu">Datos para pagar:</div><div style="white-space:pre-wrap;margin-bottom:10px"><b>${esc(D.cfg.payInfo)}</b></div>`:''}
  <label>Número de referencia</label><input value="${esc(bk.ref)}" oninput="bk.ref=this.value"><label>Banco utilizado</label><input value="${esc(bk.bank)}" oninput="bk.bank=this.value">
@@ -309,9 +210,9 @@ function panelV(){const n=new Date(),td=ymd(n),mk=td.slice(0,7),pk=ymd(new Date(
  <button class="${open?'er':'ok'}" onclick="toggleOpen()">${open?'Pausar reservas':'Reactivar reservas'}</button></div>${passCard()}`}
 function saveRates(){safe(()=>db.doc('cfg/main').update({rateType:$('#rtp').value,rates:{usd:+$('#rusd').value||0,eur:+$('#reur').value||0,upd:new Date().toLocaleString('es')}}))}
 function toggleOpen(){safe(()=>db.doc('cfg/main').update({open:D.cfg.open===false,closedMsg:$('#cmsg').value.trim()}))}
-function citasV(){const sorted=[...D.appts].sort((a,b)=>start(a)-start(b)),up=sorted.filter(a=>active(a)&&a.status!=='completada'),hi=sorted.filter(a=>!up.includes(a)).reverse();
- const card=a=>{const p=D.pay[a.id],pr=D.prof[a.client]||{};return `<div class="card"><div class="top"><b>${esc(a.svc)} · $${a.price}</b><span class="bd ${(stL[a.status]||['Estado desconocido','s-pend'])[1]}">${(stL[a.status]||['Estado desconocido'])[0]}</span></div>${fmt(a)}<br>
- <span class="mu">${esc(pr.name||'Cliente')} · ${esc(pr.phone||'')} · ${(PAY.find(x=>x[0]===a.pay)||['','Método no indicado'])[1]}</span>
+function citasV(){const now=new Date(),sorted=[...D.appts].sort((a,b)=>start(a)-start(b)),up=sorted.filter(a=>active(a)&&a.status!=='completada'),hi=sorted.filter(a=>!up.includes(a)).reverse();
+ const card=a=>{const p=D.pay[a.id],pr=D.prof[a.client]||{};return `<div class="card"><div class="top"><b>${esc(a.svc)} · $${a.price}</b><span class="bd ${stL[a.status][1]}">${stL[a.status][0]}</span></div>${fmt(a)}<br>
+ <span class="mu">${esc(pr.name||'Cliente')} · ${esc(pr.phone||'')} · ${PAY.find(x=>x[0]===a.pay)[1]}</span>
  ${a.bsAmt?`<div class="mu">Monto: $${a.price} = Bs. ${a.bsAmt} (tasa ${a.rate})</div>`:''}${p?`<div class="mu">Ref: ${esc(p.ref)} · Banco: ${esc(p.bank)} · Titular: ${esc(p.payName)} · C.I.: ${esc(p.ci)}</div>`:''}${a.rating?`<div>${'★'.repeat(a.rating)}${'☆'.repeat(5-a.rating)} <span class="mu">${esc(a.comment||'')}</span></div>`:''}
  <div class="row" style="margin-top:8px">${a.status==='pendiente'?`<button class="ok" onclick="verify('${a.id}')">✔ Confirmar pago</button><button class="er" onclick="reject('${a.id}')">Rechazar</button>`:''}${canDone(a)?`<button class="ok" onclick="finish('${a.id}')">✔ Finalizar cita</button>`:''}${active(a)&&a.status!=='completada'?`<button class="er" onclick="cancelA('${a.id}')">Cancelar</button>`:''}</div></div>`};
  return `<h2>Próximas</h2>${up.map(card).join('')||'<div class="card mu">Sin citas pendientes.</div>'}<h2>Historial</h2>${hi.map(card).join('')||'<div class="card mu">Vacío.</div>'}`}
@@ -331,7 +232,7 @@ function agendaV(){const d=bk.bd||ymd(new Date());
  <div class="row"><button onclick="blk('${d}','all')">${D.blocks.some(x=>x.date===d&&x.time==='all')?'Liberar día completo':'Bloquear día completo'}</button></div></div>`}
 function blk(d,t){safe(async()=>{const r=db.doc('blocks/'+aid(d,t==='all'?'all':t));D.blocks.some(x=>x.date===d&&x.time===t)?await r.delete():await r.set({date:d,time:t})})}
 function clientesV(){const cl=Object.entries(D.prof);return cl.length?cl.map(([id,u])=>{const l=D.appts.filter(a=>a.client===id&&active(a)).sort((a,b)=>start(a)-start(b));
- return `<div class="card"><b>${esc(u.name)}</b> <span class="mu">${esc(u.phone||'')} · C.I. ${esc(u.ci||'–')}</span>${l.map(a=>`<div class="mu">• ${esc(a.svc)} – ${fmt(a)} (${(stL[a.status]||['Estado desconocido'])[0]})</div>`).join('')||'<div class="mu">Sin citas activas</div>'}</div>`}).join(''):'<div class="card mu">Aún no hay clientes registrados.</div>'}
+ return `<div class="card"><b>${esc(u.name)}</b> <span class="mu">${esc(u.phone||'')} · C.I. ${esc(u.ci||'–')}</span>${l.map(a=>`<div class="mu">• ${esc(a.svc)} – ${fmt(a)} (${stL[a.status][0]})</div>`).join('')||'<div class="mu">Sin citas activas</div>'}</div>`}).join(''):'<div class="card mu">Aún no hay clientes registrados.</div>'}
 function avisosV(){const l=(isAdm?D.anotifs:D.notifs).sort((a,b)=>b.ts-a.ts);const col=isAdm?'anotifs':'notifs';
  setTimeout(()=>{l.filter(n=>!n.read).forEach(n=>{n.read=true;db.doc(col+'/'+n.id).update({read:true}).catch(()=>{})})},2000);
  return l.length?l.map(n=>{const a=n.apptId&&D.appts.find(x=>x.id===n.apptId);return `<div class="card n ${n.read?'r':''}">${esc(n.text)}<div class="mu">${new Date(n.ts).toLocaleString('es')}</div>
