@@ -23,7 +23,7 @@ app.secret_key = open(_kf).read().strip()
 
 class _Sess(SecureCookieSessionInterface):
     def get_cookie_secure(self, app): return request.is_secure          # Secure automático si hay HTTPS
-    def get_cookie_path(self, app):                                      # cada negocio tiene su propia sesión
+    def get_cookie_path(self, app):                                     # cada negocio tiene su propia sesión
         seg = request.path.strip('/').split('/')[0]
         return '/%s/' % seg if seg else '/'
 app.session_interface = _Sess()
@@ -223,6 +223,29 @@ def dispatch(a, inp):
         if not t or t['role'] != 'client': raise Err('Cuenta no encontrada.', 404)
         tmp = secrets.token_hex(4)
         c.execute('UPDATE users SET pass=?, must_change=1 WHERE id=?', (generate_password_hash(tmp), str(inp['uid']))); return {'tmp': tmp}
+    
+    if a == 'deleteUser':
+        if role != 'admin': raise Err('Solo el administrador puede eliminar clientes.', 403)
+        pw = s(inp.get('password'))
+        # 1. Validamos que la contraseña ingresada corresponda a la del admin actual
+        if not check_password_hash(u['pass'], pw): raise Err('Contraseña de administrador incorrecta.', 403)
+        
+        target_uid = str(inp.get('uid', ''))
+        t = c.execute('SELECT role FROM users WHERE id=?', (target_uid,)).fetchone()
+        if not t or t['role'] != 'client': raise Err('Cliente no encontrado.', 404)
+        
+        # 2. Eliminamos la cuenta de la base de datos SQL de autenticación
+        c.execute('DELETE FROM users WHERE id=?', (target_uid,))
+        
+        # 3. Limpiamos su perfil, citas y pagos de las colecciones JSON para no dejar rastro
+        del_doc('profiles', target_uid)
+        for doc_a in all_docs('appts'):
+            if doc_a.get('client') == target_uid:
+                del_doc('appts', doc_a['id'])
+                del_doc('pay', doc_a['id'])
+                
+        return {'ok': 1}
+
     if a == 'upload':
         if role != 'admin': raise Err('Sin permiso', 403)
         d = s(inp.get('data'))
