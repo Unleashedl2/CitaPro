@@ -31,7 +31,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .kp{display:grid;grid-template-columns:1fr 1fr;gap:8px}.kp .card{margin:0}.kp b{font-size:24px;display:block}
 .bar{height:12px;border-radius:6px;background:var(--ac);margin:4px 0 10px}
 .st{font-size:26px;background:none;border:0;padding:0 2px;color:var(--bd)}.st.on{color:#e6a700}
-#toast{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));max-width:560px;margin:auto;background:var(--tx);color:var(--bg);padding:12px 14px;border-radius:12px;display:none;z-index:9}
+#toast{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));max-width:560px;margin:auto;background:var(--tx);color:var(--bg);padding:12px 14px;border-radius:12px;display:none;z-index:9999}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.ph{width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--bd)}
 .h-btn{background:none!important;border:none!important;font-size:24px!important;color:var(--tx)!important;padding:0!important;line-height:1}
 </style></head>
@@ -119,28 +119,46 @@ const qrCard=()=>`<div class="card"><b>Enlace y QR de tu negocio</b><p class="mu
 const passCard=()=>`<div class="card"><b>Cambiar mi contraseña</b><label>Contraseña actual</label><input id="po" type="password"><label>Nueva (mín. 8)</label><input id="pn1" type="password"><label>Repite la nueva</label><input id="pn2" type="password"><button class="p" onclick="changePass()">Cambiar</button></div>`;
 async function resetClient(id){if(!confirm('¿Generar una contraseña temporal para este cliente?'))return;try{const r=await api('adminReset',{uid:id});MS=`Contraseña temporal de ${nameOf(id)}: ${r.tmp} (deberá cambiarla al entrar)`}catch(e){MS='Error: '+e.message}render()}
 
-/* NUEVA FUNCIÓN: ELIMINAR CLIENTE CON CONTRASEÑA */
+/* NUEVA FUNCIÓN: ELIMINAR CLIENTE CON MODAL SEGURO (CONTRASEÑA OCULTA) */
+let targetDelId = null;
 function deleteClient(id){
- const pw = prompt("⚠️ ELIMINAR CLIENTE ⚠️\nEsta acción borrará la cuenta y todas las citas de forma permanente.\n\nIngresa tu contraseña de administrador para confirmar:");
- if(pw===null)return; // El administrador presionó "Cancelar"
- if(!pw.trim())return toast('Debes ingresar tu contraseña para confirmar la eliminación.');
+ targetDelId = id;
+ const m = document.createElement('div');
+ m.id = 'delModal';
+ m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+ m.innerHTML = `<div class="card" style="width:100%;max-width:350px">
+   <b style="color:var(--er);font-size:18px;display:block;margin-bottom:8px">⚠️ ELIMINAR CLIENTE</b>
+   <p class="mu">Esta acción borrará la cuenta y todas las citas de forma permanente.</p>
+   <label>Tu contraseña de administrador:</label>
+   <input type="password" id="delPw" style="margin-bottom:16px; border-color:var(--er)">
+   <div class="row">
+     <button style="flex:1" onclick="document.getElementById('delModal').remove()">Cancelar</button>
+     <button class="er" style="flex:1;border-color:var(--er)" onclick="confirmDeleteClient()">🗑 Confirmar</button>
+   </div>
+ </div>`;
+ document.body.appendChild(m);
+ setTimeout(()=>document.getElementById('delPw').focus(), 100);
+}
+
+function confirmDeleteClient(){
+ const pw = document.getElementById('delPw').value.trim();
+ if(!pw) return toast('Debes ingresar tu contraseña.');
+ document.getElementById('delModal').remove();
  
  safe(async()=>{
-  // 1. Validar la contraseña y borrar la cuenta de Auth en el backend
-  await api('deleteUser', {uid: id, password: pw});
+  // Llamamos al backend para validar y borrar de Auth
+  await api('deleteUser', {uid: targetDelId, password: pw});
   
-  // 2. Borrar perfil de la BD de CitaPro
-  await db.doc('profiles/'+id).delete();
-  
-  // 3. Limpiar todas las citas y pagos asociados a este cliente para no dejar basura
-  const appts = D.appts.filter(a => a.client === id);
+  // Limpieza en la base de datos de CitaPro
+  await db.doc('profiles/'+targetDelId).delete();
+  const appts = D.appts.filter(a => a.client === targetDelId);
   for(const a of appts){
    await db.doc('appts/'+a.id).delete();
    if(a.pay !== 'efectivo') await db.doc('pay/'+a.id).delete().catch(()=>{});
   }
   
   toast('Cliente eliminado exitosamente.');
-  refresh(true); // Recargar los datos limpios de la base de datos
+  refresh(true); 
  });
 }
 
