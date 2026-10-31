@@ -33,6 +33,9 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .st{font-size:26px;background:none;border:0;padding:0 2px;color:var(--bd)}.st.on{color:#e6a700}
 #toast{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));max-width:560px;margin:auto;background:var(--tx);color:var(--bg);padding:12px 14px;border-radius:12px;display:none;z-index:9}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.ph{width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--bd)}
+
+/* Botones invisibles para el selector de hora */
+.h-btn{background:none!important;border:none!important;font-size:24px!important;color:var(--tx)!important;padding:0!important;line-height:1}
 </style></head>
 <body><div class="w" id="app"><p class="mu">Cargando…</p></div><div id="toast"></div>
 <script>
@@ -44,8 +47,21 @@ let db,user,assets,meId,meName='',isAdm=false,ready=false,t0=Date.now();
 let D={cfg:null,appts:[],blocks:[],notifs:[],anotifs:[],prof:{},pay:{}},prof=null,tab='',bk={},viewM=new Date(),ES=null,msg='',cm={};
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pad=n=>String(n).padStart(2,'0'),ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const start=a=>{const[y,m,d]=a.date.split('-').map(Number);return new Date(y,m-1,d,+a.time.slice(0,2))};
-const fmt=a=>start(a).toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'})+' a las '+a.time;
+
+// FORMATO DE 12 HORAS (AM/PM)
+const fmt12=t=>{const[h,m]=t.split(':').map(Number);return `${h%12||12}:${pad(m)} ${h>=12?'PM':'AM'}`};
+
+// VARIABLES GLOBALES PARA EL SELECTOR MANUAL DE HORA (Inicia a las 8:00 AM)
+let ch24=8, cmin=0;
+window.adjH=d=>{ch24+=d;if(ch24>22)ch24=8;if(ch24<8)ch24=22;render()};
+window.adjM=d=>{cmin+=d*30;if(cmin>=60){cmin=0;window.adjH(1)}else if(cmin<0){cmin=30;window.adjH(-1)}else render()};
+window.tgAm=()=>{if(ch24>=12&&ch24-12>=8)ch24-=12;else if(ch24<12&&ch24+12<=22)ch24+=12;render()};
+window.setT=()=>{const t=pad(ch24)+':'+pad(cmin);const[yy,mm,dd]=bk.date.split('-').map(Number);
+ if(new Date(yy,mm-1,dd,ch24,cmin)<=new Date())return toast('Esta hora ya pasó.');
+ if(taken(bk.date,t))return toast('Esta hora ya está ocupada.');bk.time=t;render()};
+
+const start=a=>{const[y,m,d]=a.date.split('-').map(Number);return new Date(y,m-1,d,+a.time.slice(0,2),+a.time.slice(3,5)||0)};
+const fmt=a=>start(a).toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'})+' a las '+fmt12(a.time);
 const active=a=>a.status!=='cancelada'&&a.status!=='rechazada';
 const aid=(d,t)=>d+'_'+t.replace(':','');
 const nameOf=id=>D.prof[id]?.name||'Cliente';
@@ -72,7 +88,6 @@ db={doc:p=>({get:async()=>{const j=await api('doc',{op:'get',path:p});return{exi
  delete:async()=>{await api('doc',{op:'delete',path:p});refresh(true)}})};
 assets={upload:async b=>{const d=await new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});const r=await api('upload',{data:d});return{id:r.url}}};
 
-// Recarga fresca del snapshot al volver a la app
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&meId)refresh(true)});
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -132,8 +147,8 @@ async function startApp(){try{if(!INFO){INFO=await api('info').catch(()=>null);i
  await refresh(true);clearInterval(polling);polling=setInterval(()=>{if(!document.hidden)refresh(false)},(isAdm||isMaster)?5000:15000)}catch(e){msg='Error: '+e.message;render()}}
 async function tick(){if(!D.cfg)return;const now=Date.now();
  for(const a of D.appts){if(!(a.status==='confirmada'||a.status==='reservada'))continue;const df=start(a)-now;if(df<=0||df>1*3600e3)continue;
-  if(isAdm&&!a.remA){a.remA=true;await safe(async()=>{await db.doc('appts/'+a.id).update({remA:true});await anotif(`⏰ Próxima cita a las ${a.time}: ${nameOf(a.client)} – ${a.svc}.`,a.id)})}
-  if(a.client===meId&&!a.remC){a.remC=true;await safe(async()=>{await db.doc('appts/'+a.id).update({remC:true});await notif(meId,`⏰ Recordatorio: tu cita de ${a.svc} es a las ${a.time} (en menos de 1 hora).`)})}}}
+  if(isAdm&&!a.remA){a.remA=true;await safe(async()=>{await db.doc('appts/'+a.id).update({remA:true});await anotif(`⏰ Próxima cita a las ${fmt12(a.time)}: ${nameOf(a.client)} – ${a.svc}.`,a.id)})}
+  if(a.client===meId&&!a.remC){a.remC=true;await safe(async()=>{await db.doc('appts/'+a.id).update({remC:true});await notif(meId,`⏰ Recordatorio: tu cita de ${a.svc} es a las ${fmt12(a.time)} (en menos de 1 hora).`)})}}}
 
 function render(){const A=$('#app');if(!meId){A.innerHTML=authV();return}
  if(isMaster){A.innerHTML=masterV();return}
@@ -162,16 +177,39 @@ function profV(){return `<h1>Tus datos</h1><p class="mu">Se guardan en la base d
 function saveProf(){const p={name:$('#pn').value.trim(),phone:$('#pt').value.trim(),ci:$('#pc').value.trim()};if(!p.name||!p.phone)return toast('Completa nombre y teléfono.');
  safe(async()=>{await db.doc('profiles/'+meId).set(p);prof=p;render()})}
 
-/* cliente - Módulo de reservas con COMANDA */
+/* cliente - Módulo de reservas interactivo */
 function bookV(){if(D.cfg.open===false)return '<div class="card mu">Las reservas están pausadas por ahora.</div>';
  const d=viewM,y=d.getFullYear(),m=d.getMonth(),first=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate(),today=ymd(new Date());
  let cells='';for(let i=0;i<first;i++)cells+='<span></span>';
  for(let i=1;i<=days;i++){const s=`${y}-${pad(m+1)}-${pad(i)}`;cells+=`<button class="${bk.date===s?'p':''}" ${s<today?'disabled':''} onclick="bk.date='${s}';bk.time=null;render()">${i}</button>`}
  const dg=bk.pay&&bk.pay!=='efectivo',sv=D.cfg.svc.find(s=>s.id===bk.svc);
+ 
  return `<h2>1. Servicio</h2><div class="grid">${D.cfg.svc.map(s=>`<button class="opt ${bk.svc===s.id?'on':''}" onclick="bk.svc='${s.id}';render()">${s.img?`<img src="${s.img}" alt="">`:''}<div class="t"><b>${esc(s.name)}</b><br><span class="mu">$${s.price}</span></div></button>`).join('')}</div>
  <h2>2. Día</h2><div class="card"><div class="top" style="margin-bottom:8px"><button onclick="viewM=new Date(${y},${m-1},1);render()">‹</button><b>${d.toLocaleDateString('es',{month:'long',year:'numeric'})}</b><button onclick="viewM=new Date(${y},${m+1},1);render()">›</button></div>
  <div class="cal">${['L','M','M','J','V','S','D'].map(x=>`<div class="h">${x}</div>`).join('')}${cells}</div></div>
- ${bk.date?`<h2>3. Hora</h2><div class="grid">${slots().map(t=>{const[yy,mm,dd]=bk.date.split('-').map(Number),past=new Date(yy,mm-1,dd,+t.slice(0,2))<=new Date();return `<button class="${bk.time===t?'p':''}" ${past||taken(bk.date,t)?'disabled':''} onclick="bk.time='${t}';render()">${t}</button>`}).join('')}</div>`:''}
+ 
+ ${bk.date?`<h2>3. Hora</h2><div class="grid">${slots().map(t=>{const[yy,mm,dd]=bk.date.split('-').map(Number),past=new Date(yy,mm-1,dd,+t.slice(0,2))<=new Date();return `<button class="${bk.time===t?'p':''}" ${past||taken(bk.date,t)?'disabled':''} onclick="bk.time='${t}';render()">${fmt12(t)}</button>`}).join('')}</div>
+ <div class="card" style="margin-top:12px; border: 1px solid var(--bd); background: var(--bg)">
+   <div class="mu" style="text-align:center;margin-bottom:12px">O edita la hora exacta (8:00 AM - 10:00 PM)</div>
+   <div style="display:flex; justify-content:center; gap:20px; align-items:center">
+     <div style="text-align:center">
+       <button class="h-btn" onclick="adjH(1)">▲</button>
+       <div style="font-size:28px;font-weight:bold;margin:2px 0">${ch24%12||12}</div>
+       <button class="h-btn" onclick="adjH(-1)">▼</button>
+     </div>
+     <div style="font-size:28px;font-weight:bold">:</div>
+     <div style="text-align:center">
+       <button class="h-btn" onclick="adjM(1)">▲</button>
+       <div style="font-size:28px;font-weight:bold;margin:2px 0">${pad(cmin)}</div>
+       <button class="h-btn" onclick="adjM(-1)">▼</button>
+     </div>
+     <button class="p" style="font-size:18px;padding:12px 18px;margin-left:10px;border-radius:12px" onclick="tgAm()">${ch24>=12?'PM':'AM'}</button>
+   </div>
+   <div style="text-align:center;margin-top:16px">
+     <button class="ok" style="width:100%" onclick="setT()">Fijar esta hora</button>
+   </div>
+ </div>`:''}
+ 
  ${bk.time?`<h2>4. Método de pago</h2><div class="grid">${PAY.map(p=>`<button class="opt ${bk.pay===p[0]?'on':''}" onclick="bk.pay='${p[0]}';render()"><div class="t">${p[2]}<br>${p[1]}</div></button>`).join('')}</div>
  ${dg?`<div class="card">${amtV(sv)}${D.cfg.payInfo?`<div class="mu">Datos para pagar:</div><div style="white-space:pre-wrap;margin-bottom:10px"><b>${esc(D.cfg.payInfo)}</b></div>`:''}
  <label>Número de referencia</label><input value="${esc(bk.ref)}" oninput="bk.ref=this.value"><label>Banco utilizado</label><select onchange="bk.bank=this.value"><option value="">Selecciona un banco...</option>${["Banco de Venezuela S.A.C.A.","BBVA Provincial S.A.C.A.","Banesco S.A.C.A.","Banco Mercantil S.A.C.A.","Banco Nacional de Crédito (BNC)","Banco Occidental de Descuento (BOD / BNC)","Banplus Banco Universal","Banco Activo S.A.","Banco Agrícola de Venezuela","Banco Bicentenario del Pueblo","Banco de Carora","Banco de la Gente Emprendedora (Bangente)","Banco del Tesoro","Banco Digital los Trabajadores","Banco Espirito Santo","Banco Exterior S.A.C.A.","Banco Internacional de Desarrollo","Banco Plaza","Banco Sofitasa","Banco VENECREDIT S.A.","BFC Banco Fondo Común","BFC Banco Universal","Caracas Banco Universal","Citibank N.A.","DELSUR Banco Universal","Exterior Banco Universal","100% Banco, Banco Universal","Mi Banco, Banco Microfinanciero","Bancamiga Banco Universal"].map(b=>`<option value="${b}" ${bk.bank===b?'selected':''}>${b}</option>`).join('')}</select>
@@ -184,7 +222,7 @@ function bookV(){if(D.cfg.open===false)return '<div class="card mu">Las reservas
    ${sv?`<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>Cliente:</span> <b style="text-align: right">${esc(bk.pn??prof.name)}</b></div>
    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>C.I.:</span> <b>${esc(bk.ci??prof.ci)}</b></div>
    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>Fecha:</span> <b>${bk.date}</b></div>
-   <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>Hora:</span> <b>${bk.time}</b></div>
+   <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>Hora:</span> <b>${fmt12(bk.time)}</b></div>
    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>Servicio:</span> <b style="text-align: right">${esc(sv.name)}</b></div>
    <div style="border-top: 1px dashed var(--mu); padding-top: 8px; margin-top: 8px;">
      <div style="display: flex; justify-content: space-between; font-size: 16px;"><span>Total (USD):</span> <b>$${sv.price}</b></div>
@@ -260,7 +298,7 @@ async function up(i,f){if(!f||!assets)return toast('No se puede subir la foto.')
 function saveServ(){safe(async()=>{await db.doc('cfg/main').update({svc:ES});toast('Servicios guardados.')})}
 function agendaV(){const d=bk.bd||ymd(new Date());
  return `<div class="card"><label>Fecha</label><input type="date" min="${ymd(new Date())}" value="${d}" onchange="bk.bd=this.value;render()"><div class="grid">${slots().map(t=>{const b=D.blocks.some(x=>x.date===d&&x.time===t),ap=D.appts.some(a=>a.id===aid(d,t)&&active(a));
- return `<button class="${b?'p':''}" ${ap?'disabled':''} onclick="blk('${d}','${t}')">${t}${ap?' · cita':b?' · bloq.':''}</button>`}).join('')}</div><br>
+ return `<button class="${b?'p':''}" ${ap?'disabled':''} onclick="blk('${d}','${t}')">${fmt12(t)}${ap?' · cita':b?' · bloq.':''}</button>`}).join('')}</div><br>
  <div class="row"><button onclick="blk('${d}','all')">${D.blocks.some(x=>x.date===d&&x.time==='all')?'Liberar día completo':'Bloquear día completo'}</button></div></div>`}
 function blk(d,t){safe(async()=>{const r=db.doc('blocks/'+aid(d,t==='all'?'all':t));D.blocks.some(x=>x.date===d&&x.time===t)?await r.delete():await r.set({date:d,time:t})})}
 function clientesV(){const cl=Object.entries(D.prof).filter(([id])=>id!==meId);return (MS?`<div class="card s-pend">${esc(MS)}</div>`:'')+(cl.length?cl.map(([id,u])=>{const l=D.appts.filter(a=>a.client===id&&active(a)).sort((a,b)=>start(a)-start(b));
