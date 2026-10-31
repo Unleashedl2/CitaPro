@@ -118,6 +118,32 @@ async function enablePush(){try{if(await Notification.requestPermission()!=='gra
 const qrCard=()=>`<div class="card"><b>Enlace y QR de tu negocio</b><p class="mu">Compártelo con tus clientes: desde aquí reservan e instalan la app.</p><div style="text-align:center"><img src="qr.svg" alt="QR" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:12px"></div><input readonly value="${esc(location.origin+location.pathname)}" onclick="this.select()"><div class="row"><a href="qr.svg" download="qr-negocio.svg"><button>Descargar QR</button></a><button onclick="navigator.clipboard&&navigator.clipboard.writeText(location.origin+location.pathname);toast('Enlace copiado')">Copiar enlace</button></div></div>`;
 const passCard=()=>`<div class="card"><b>Cambiar mi contraseña</b><label>Contraseña actual</label><input id="po" type="password"><label>Nueva (mín. 8)</label><input id="pn1" type="password"><label>Repite la nueva</label><input id="pn2" type="password"><button class="p" onclick="changePass()">Cambiar</button></div>`;
 async function resetClient(id){if(!confirm('¿Generar una contraseña temporal para este cliente?'))return;try{const r=await api('adminReset',{uid:id});MS=`Contraseña temporal de ${nameOf(id)}: ${r.tmp} (deberá cambiarla al entrar)`}catch(e){MS='Error: '+e.message}render()}
+
+/* NUEVA FUNCIÓN: ELIMINAR CLIENTE CON CONTRASEÑA */
+function deleteClient(id){
+ const pw = prompt("⚠️ ELIMINAR CLIENTE ⚠️\nEsta acción borrará la cuenta y todas las citas de forma permanente.\n\nIngresa tu contraseña de administrador para confirmar:");
+ if(pw===null)return; // El administrador presionó "Cancelar"
+ if(!pw.trim())return toast('Debes ingresar tu contraseña para confirmar la eliminación.');
+ 
+ safe(async()=>{
+  // 1. Validar la contraseña y borrar la cuenta de Auth en el backend
+  await api('deleteUser', {uid: id, password: pw});
+  
+  // 2. Borrar perfil de la BD de CitaPro
+  await db.doc('profiles/'+id).delete();
+  
+  // 3. Limpiar todas las citas y pagos asociados a este cliente para no dejar basura
+  const appts = D.appts.filter(a => a.client === id);
+  for(const a of appts){
+   await db.doc('appts/'+a.id).delete();
+   if(a.pay !== 'efectivo') await db.doc('pay/'+a.id).delete().catch(()=>{});
+  }
+  
+  toast('Cliente eliminado exitosamente.');
+  refresh(true); // Recargar los datos limpios de la base de datos
+ });
+}
+
 async function changePass(){if($('#pn1').value!==$('#pn2').value)return toast('Las contraseñas nuevas no coinciden.');try{await api('changePass',{old:$('#po').value,new:$('#pn1').value});toast('Contraseña actualizada.');$('#po').value=$('#pn1').value=$('#pn2').value=''}catch(e){toast(e.message)}}
 let CU=null,isMaster=false,MS='';
 async function doChange(){const p=$('#cp').value.trim(),a=$('#c1').value,b=$('#c2').value;
@@ -297,7 +323,7 @@ function agendaV(){const d=bk.bd||ymd(new Date());
  return `<button class="${b?'p':''}" ${ap?'disabled':''} onclick="blk('${d}','${t}')">${fmt12(t)}${ap?' · cita':b?' · bloq.':''}</button>`}).join('')}</div><br>
  <div class="row"><button onclick="blk('${d}','all')">${D.blocks.some(x=>x.date===d&&x.time==='all')?'Liberar día completo':'Bloquear día completo'}</button></div></div>`}
 
-/* admin - Módulo de clientes rediseñado con tarjetas de perfil */
+/* admin - Módulo de clientes con Eliminación Segura */
 function clientesV(){const cl=Object.entries(D.prof).filter(([id])=>id!==meId);return (MS?`<div class="card s-pend">${esc(MS)}</div>`:'')+(cl.length?cl.map(([id,u])=>{const l=D.appts.filter(a=>a.client===id&&active(a)).sort((a,b)=>start(a)-start(b));
  return `<div class="card">
    <div style="border-bottom: 1px dashed var(--bd); padding-bottom: 8px; margin-bottom: 8px;">
@@ -313,7 +339,10 @@ function clientesV(){const cl=Object.entries(D.prof).filter(([id])=>id!==meId);r
      <b style="font-size: 13px;">Historial de citas:</b>
      ${l.length ? l.map(a=>`<div class="mu" style="margin-top:4px">• <b>${esc(a.svc)}</b><br><span style="padding-left:10px">${fmt(a)} (${SL(a.status)[0]})</span></div>`).join('') : '<div class="mu" style="margin-top:4px">No tiene citas activas</div>'}
    </div>
-   <button class="er" style="width:100%; background:transparent" onclick="resetClient('${id}')">Restablecer contraseña de cliente</button>
+   <div class="row">
+     <button style="flex:1" onclick="resetClient('${id}')">Restablecer clave</button>
+     <button class="er" style="flex:1; background:transparent; border-color:var(--er)" onclick="deleteClient('${id}')">🗑 Eliminar</button>
+   </div>
  </div>`}).join(''):'<div class="card mu">Aún no hay clientes registrados.</div>')}
 
 function avisosV(){const l=(isAdm?D.anotifs:D.notifs).sort((a,b)=>b.ts-a.ts);const col=isAdm?'anotifs':'notifs';
